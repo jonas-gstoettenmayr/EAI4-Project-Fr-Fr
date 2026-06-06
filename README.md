@@ -7,13 +7,18 @@ To start:
 * bottom right click open in dev container
 * done - I hope?
 
-# Dev Container Setup
+## Naming convention
 
-## Prerequesites
+Use RPS (for ROCK paper Scissors) for the files which have to do with rps (i.e. instead of digit for the exercise project).
+
+
+## Dev Container Setup
+
+### Prerequesites
 - Docker is running on your system
 - Dev Container Extension is installed (You can use the profile from CPP3)
 
-## Configuration
+### Configuration
 - Enter the IP or your Pi and your username (kit-XX) in the .env file
 - Build and open the container (ensure the Pi is connected when the container is starting)
 - During the first build the container will prompt you for the password of your Pi (by default following the pattern kit-XX), please enter the password
@@ -22,7 +27,7 @@ To start:
 bash .devcontainer/init.sh
 ```
 
-## Deployment and Debugging
+### Deployment and Debugging
 All targets for building and deployment can be run via tasks in VSCode.
 - ```train-model``` executes the Python script to train a TensorFlow model and convert it to TensorFlow Lite
 - ```build``` builds the C++ application for model inference

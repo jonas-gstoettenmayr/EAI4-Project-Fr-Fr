@@ -213,14 +213,14 @@ int RunCameraRPSInference(const ProgramOptions& options,
   SenseHatDisplay display;
 
   rpicam::CaptureParameters params;
-  params.width = 224;
-  params.height = 224;
+  params.width = cCaptureWidth;
+  params.height = cCaptureHeight;
   
   params.shutter_us = 0;      // set for manual shutter, e.g. 8000
   params.gain = 0.0f;         // increase for dark environments
   params.buffer_count = 20;
   params.awb = true;
-  params.fps = 20;
+  params.fps = cFPS;
   
   rpicam::RpiCameraCapture camera(params);
   
@@ -270,7 +270,7 @@ int RunCameraRPSInference(const ProgramOptions& options,
       std::cout << "Mean Prediction/processing time: " << mean/cSampleAmount << std::endl;
 
       // democracy calculations
-      std::array<size_t, cClasses> predCounts = {};
+      std::array<size_t, cModelOutputs> predCounts = {};
       size_t most_frequent_idx = 0;
       int win = 0;
       float AVGConf = 0.0;
@@ -290,7 +290,7 @@ int RunCameraRPSInference(const ProgramOptions& options,
         if (display.available()) {
 
           RPS rps_pred = ConvertPredToRPS(most_frequent_idx);
-          
+
           if(rps_pred == RPS::reset){
             display.ShowPrideFlag();
             std::this_thread::sleep_for(cShowGestureTime);

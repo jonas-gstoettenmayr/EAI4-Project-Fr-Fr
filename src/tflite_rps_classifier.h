@@ -10,7 +10,7 @@ using Probabilities = std::array<float, cModelOutputs>;
 
 struct RPSPrediction {
   int rps = 3; // 0rock, 1paper, 2sissors, 3reset
-  bool win = true;
+  bool win = true; // if we should win or not, i.e accessory = true/1, no accessory = false/0
   float confidence = 0.0F;
   Probabilities probabilities;
 };

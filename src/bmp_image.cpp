@@ -95,7 +95,7 @@ BmpImage LoadBmp24(const std::string& path) {
     }
 
     const int destination_y = is_bottom_up ? (abs_height - 1 - row_index) : row_index;
-    unsigned char * destination = image.rgb.data() +
+    unsigned char* destination = image.rgb.data() +
                                  static_cast<std::size_t>(destination_y) *
                                      static_cast<std::size_t>(width) * 3U;
 
@@ -110,28 +110,4 @@ BmpImage LoadBmp24(const std::string& path) {
   }
 
   return image;
-}
-
-void SavePgm(const std::string& path, int width, int height, const std::vector<float>& pixels) {
-  if (width <= 0 || height <= 0) {
-    throw std::runtime_error("Invalid PGM dimensions for: " + path);
-  }
-  if (pixels.size() != static_cast<std::size_t>(width * height)) {
-    throw std::runtime_error("PGM pixel buffer has unexpected size for: " + path);
-  }
-
-  std::ofstream output(path, std::ios::binary);
-  if (!output) {
-    throw std::runtime_error("Failed to open PGM output file: " + path);
-  }
-
-  output << "P5\n" << width << ' ' << height << "\n255\n";
-  for (float value : pixels) {
-    const float clamped = std::clamp(value, 0.0F, 1.0F);
-    const auto byte_value = static_cast<unsigned char>(clamped * 255.0F + 0.5F);
-    output.write(reinterpret_cast<const char*>(&byte_value), 1);
-  }
-  if (!output) {
-    throw std::runtime_error("Failed while writing PGM file: " + path);
-  }
 }

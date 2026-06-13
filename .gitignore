@@ -6,3 +6,8 @@ third_party/
 *.Identifier
 __pycache__/
 *.pyc
+
+refs/
+test/
+augmented/
+processed/

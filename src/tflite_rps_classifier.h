@@ -9,7 +9,8 @@
 using Probabilities = std::array<float, cModelOutputs>;
 
 struct RPSPrediction {
-  RPS rps = RPS::reset;
+  int rps = 3; // 0rock, 1paper, 2sissors, 3reset
+  bool win = true;
   float confidence = 0.0F;
   Probabilities probabilities;
 };
@@ -26,16 +27,19 @@ class TfliteRPSClassifier {
 
   bool ok() const { return ok_; }
   const std::string& error_message() const { return error_message_; }
-  RPSPrediction Predict(const std::vector<float>& normalized_image_28x28);
+  RPSPrediction Predict(const std::vector<pixel>& image);
 
  private:
   struct Impl;
 
   bool Load(const std::string& model_path);
-  bool CopyInput(const std::vector<float>& normalized_image_28x28);
+  bool CopyInput(const std::vector<pixel>& image);
   Probabilities ReadOutput() const;
 
   std::unique_ptr<Impl> impl_;
   bool ok_ = false;
   std::string error_message_;
 };
+
+// intake the pure model output index, e.g. 0 and ouptut RPS::ROCK
+RPS ConvertPredToRPS(int pred); 

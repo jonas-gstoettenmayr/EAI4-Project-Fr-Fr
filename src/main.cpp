@@ -3,12 +3,15 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <thread>
+#include <algorithm>
 
+#include "consts.h"
 #include "bmp_image.h"
-#include "camera_capture.h"
 #include "rps_preprocessor.h"
 #include "sense_hat_display.h"
 #include "tflite_rps_classifier.h"
+#include "RpiCameraCapture.hpp"
 
 namespace {
 
@@ -127,8 +130,8 @@ bool ParseArgs(int argc, char** argv, ProgramOptions* options) {
 }
 
 // Loads and preprocesses one digit image.
-bool LoadDigitInput(const std::string& image_path,
-                    std::vector<float>* mnist_input) {
+bool LoadRPSInput(const std::string& image_path,
+                    std::vector<uint8_t>* rps_input) {
   BmpImage image;
 
   try {
@@ -138,23 +141,23 @@ bool LoadDigitInput(const std::string& image_path,
     return false;
   }
 
-  PreprocessResult preprocess = PreprocessForMnist(image);
+  PreprocessResult preprocess = PreprocessForRPS(image);
 
   if (!preprocess.success) {
     std::cerr << "Preprocessing failed: " << preprocess.error_message << "\n";
     return false;
   }
 
-  *mnist_input = preprocess.input;
+  *rps_input = preprocess.input;
   return true;
 }
 
 // Benchmarks one digit model.
-int RunDigitBenchmark(const ProgramOptions& options,
+int RunRPSBenchmark(const ProgramOptions& options,
                       TfliteRPSClassifier* classifier) {
-  std::vector<float> mnist_input;
+  std::vector<uint8_t> rps_input;
 
-  if (!LoadDigitInput(options.test_image_path, &mnist_input)) {
+  if (!LoadRPSInput(options.test_image_path, &rps_input)) {
     return 1;
   }
 
@@ -162,7 +165,7 @@ int RunDigitBenchmark(const ProgramOptions& options,
 
   // Run warmup inferences before measuring.
   for (int index = 0; index < options.warmup_runs; ++index) {
-    prediction = classifier->Predict(mnist_input);
+    prediction = classifier->Predict(rps_input);
 
     if (!classifier->ok()) {
       std::cerr << "Warmup inference failed: "
@@ -175,7 +178,7 @@ int RunDigitBenchmark(const ProgramOptions& options,
   const auto start = std::chrono::steady_clock::now();
 
   for (int index = 0; index < options.benchmark_runs; ++index) {
-    prediction = classifier->Predict(mnist_input);
+    prediction = classifier->Predict(rps_input);
 
     if (!classifier->ok()) {
       std::cerr << "Inference failed: "
@@ -196,7 +199,7 @@ int RunDigitBenchmark(const ProgramOptions& options,
   std::cout << "Test image: " << options.test_image_path << "\n";
   std::cout << "Warmup runs: " << options.warmup_runs << "\n";
   std::cout << "Runs: " << options.benchmark_runs << "\n";
-  std::cout << "Predicted digit: " << prediction.rps << "\n";
+  std::cout << "Predicted gesture: " << prediction.rps << "\n";
   std::cout << "Confidence: " << prediction.confidence << "\n";
   std::cout << "Total inference ms: " << total_ms << "\n";
   std::cout << "Average inference ms: " << average_ms << "\n";
@@ -205,63 +208,124 @@ int RunDigitBenchmark(const ProgramOptions& options,
 }
 
 // Runs digit inference from the camera.
-int RunCameraDigitInference(const ProgramOptions& options,
+int RunCameraRPSInference(const ProgramOptions& options,
                             TfliteRPSClassifier* classifier) {
   SenseHatDisplay display;
 
-  CaptureOptions capture_options;
-  capture_options.output_path = cCapturePath;
-  capture_options.timeout_ms = cCaptureTimeoutMs;
-  capture_options.width = cCaptureWidth;
-  capture_options.height = cCaptureHeight;
+  rpicam::CaptureParameters params;
+  params.width = 224;
+  params.height = 224;
+  
+  params.shutter_us = 0;      // set for manual shutter, e.g. 8000
+  params.gain = 0.0f;         // increase for dark environments
+  params.buffer_count = 20;
+  params.awb = true;
+  params.fps = 20;
+  
+  rpicam::RpiCameraCapture camera(params);
+  
+  std::this_thread::sleep_for(std::chrono::milliseconds(cCaptureTimeoutMs));
+  std::cout << "Starting Loop" << std::endl;
+  try {
+    while (true) {
+      double mean = 0.0;
+      // Get current image to framebuffer.
+      display.StartCountDown(cCountDownLenght);
+      
+      std::array<RPSPrediction, cSampleAmount> preds;
+      auto next_tick = std::chrono::steady_clock::now(); // current time
+      for(size_t i = 0; i < cSampleAmount; i++) {
+        next_tick += cWaitTime;
+        auto start = std::chrono::steady_clock::now();
 
-  std::string camera_backend;
-  std::string capture_error;
+        std::shared_ptr<const rpicam::RgbFrame> frame = camera.currentFrame();
+        while (!frame) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            frame = camera.currentFrame();
+        }
 
-  while (true) {
-    // Capture one image from the camera.
-    if (!CaptureStillBmp(capture_options, &camera_backend, &capture_error)) {
-      std::cerr << "Camera capture failed: " << capture_error << "\n";
-      return 1;
-    }
+        auto processed = PreprocessForRPS(*frame);
+        if (!processed.success){
+          std::cerr << "Error: " << processed.error_message << "\n";
+          return 1;
+        }
 
-    std::cout << "Captured image with " << camera_backend << "\n";
+        // Run digit prediction.
+        preds[i] = classifier->Predict(processed.input);
 
-    std::vector<float> mnist_input;
+        if (!classifier->ok()) {
+          std::cerr << "Inference failed: "
+                    << classifier->error_message() << "\n";
+          return 1;
+        }
 
-    // Convert the captured image into MNIST input values.
-    if (!LoadDigitInput(cCapturePath, &mnist_input)) {
-      return 1;
-    }
+        std::cout << "Predicted gesture num: " << preds[i].rps << "\n";
+        std::cout << "Predicted gesture: " << ConvertPredToRPS(preds[i].rps) << "\n";
+        std::cout << "Confidence: " << preds[i].confidence << "\n";
 
-    // Run digit prediction.
-    RPSPrediction prediction = classifier->Predict(mnist_input);
+        auto stop = std::chrono::steady_clock::now();
+        mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+        std::this_thread::sleep_until(next_tick);
+      } // end for
+      std::cout << "Mean Prediction/processing time: " << mean/cSampleAmount << std::endl;
 
-    if (!classifier->ok()) {
-      std::cerr << "Inference failed: "
-                << classifier->error_message() << "\n";
-      return 1;
-    }
+      // democracy calculations
+      std::array<size_t, cClasses> predCounts = {};
+      size_t most_frequent_idx = 0;
+      int win = 0;
+      float AVGConf = 0.0;
 
-    std::cout << "Predicted digit: " << prediction.rps << "\n";
-    std::cout << "Confidence: " << prediction.confidence << "\n";
-
-    // Show the predicted digit on the Sense HAT.
-    if (options.show_on_sense_hat) {
-      if (display.available()) {
-        display.ShowRPS(prediction.rps, prediction.confidence);
-      } else {
-        std::cerr << "Sense HAT unavailable: "
-                  << display.error_message() << "\n";
+      for(size_t i = 0; i < cSampleAmount; i++) {
+        size_t currentRPS = preds[i].rps;
+        if(++predCounts[currentRPS] > predCounts[most_frequent_idx])
+        most_frequent_idx = currentRPS;
+        win += (2 * preds[i].win) - 1;
+        AVGConf += preds[i].confidence;
       }
-    }
+
+      AVGConf /= cSampleAmount;
+
+      // Show the predicted digit on the Sense HAT.
+      if (options.show_on_sense_hat) {
+        if (display.available()) {
+
+          RPS rps_pred = ConvertPredToRPS(most_frequent_idx);
+          
+          if(rps_pred == RPS::reset){
+            display.ShowPrideFlag();
+            std::this_thread::sleep_for(cShowGestureTime);
+            break;
+          }
+          if(win > 0){
+            display.ShowRPS(ConvertPredToRPS((most_frequent_idx +1) % 3 ), AVGConf);
+            std::this_thread::sleep_for(cShowGestureTime);
+            display.ShowWin();
+          } else {
+            display.ShowRPS(rps_pred, AVGConf);
+            std::this_thread::sleep_for(cShowGestureTime);
+            display.ShowLoss();
+          }
+          std::this_thread::sleep_for(cShowResultTime);
+
+        } else {
+          std::cerr << "Sense HAT unavailable: "
+                    << display.error_message() << "\n";
+        }
+      } // end if
+
+    } // end while
+
+  } catch (const std::exception &e) {
+    std::cerr << "Error: " << e.what() << "\n";
+    return 1;
   }
+  return 0;
 }
 
 
 }  // namespace
 
-int main2(int argc, char** argv) {
+int main(int argc, char** argv) {
   ProgramOptions options;
 
   // Parse command line options.
@@ -269,31 +333,19 @@ int main2(int argc, char** argv) {
     return 1;
   }
 
+  // Load the digit model, which may be normal, pruned, float32, or int8.
+  TfliteRPSClassifier classifier(options.model_path);
+  if (!classifier.ok()) {
+    std::cerr << "Failed to load digit model: "
+              << classifier.error_message() << "\n";
+    return 1;
+  }
   switch (options.mode) {
     case ProgramMode::cCameraRPSInference: {
-      // Load the digit model, which may be normal, pruned, float32, or int8.
-      TfliteRPSClassifier classifier(options.model_path);
-
-      if (!classifier.ok()) {
-        std::cerr << "Failed to load digit model: "
-                  << classifier.error_message() << "\n";
-        return 1;
-      }
-
-      return RunCameraDigitInference(options, &classifier);
+      return RunCameraRPSInference(options, &classifier);
     }
-
     case ProgramMode::cBenchmarkRPSModel: {
-      // Load the digit model, which may be normal, pruned, float32, or int8.
-      TfliteRPSClassifier classifier(options.model_path);
-
-      if (!classifier.ok()) {
-        std::cerr << "Failed to load digit model: "
-                  << classifier.error_message() << "\n";
-        return 1;
-      }
-
-      return RunDigitBenchmark(options, &classifier);
+      return RunRPSBenchmark(options, &classifier);
     }
 
   }

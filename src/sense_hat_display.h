@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <chrono>
 #include "rps.h"
 
 class SenseHatDisplay {
@@ -12,7 +13,14 @@ class SenseHatDisplay {
 
   bool available() const { return available_; }
   const std::string& error_message() const { return error_message_; }
+
+  // start is countdown, e.g. start=3 -> 3, 2, 1,
+  void StartCountDown(size_t start) ; 
   bool ShowRPS(RPS rps, float confidence);
+  void ShowWin();
+  void ShowLoss();
+  void ShowPrideFlag();
+  
   void ShowErrorMarker();
   void Clear();
 

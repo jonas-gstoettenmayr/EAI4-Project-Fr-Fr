@@ -1,13 +1,14 @@
 #pragma once
 
-#include <string>
 #include <vector>
+#include <cstdint>
+
+typedef uint8_t pixel;
 
 struct BmpImage {
   int width = 0;
   int height = 0;
-  std::vector<unsigned char> rgb;
+  std::vector<pixel> rgb;
 };
 
 BmpImage LoadBmp24(const std::string& path);
-void SavePgm(const std::string& path, int width, int height, const std::vector<float>& pixels);

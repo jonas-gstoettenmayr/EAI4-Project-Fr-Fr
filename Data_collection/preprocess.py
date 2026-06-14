@@ -21,8 +21,8 @@ Kernel = np.array([
     [1, 2, 1],
 ], dtype=np.float32) / 16.0
 
-source = "/home/kit-17/Documents/EAI/Project/data/"
-destination = "/home/kit-17/Documents/EAI/Project/processed"
+source = "data"
+destination = "processed"
 
 files = []
 

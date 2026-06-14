@@ -10,15 +10,15 @@ from torchvision import transforms
 # Variables
 # _____________________________________________________________________________________________
 
-source = "/home/kit-17/Documents/EAI/Project/processed/"
-destination = "/home/kit-17/Documents/EAI/Project/augmented/"
+source = "processed"
+destination = "augmented"
 
 files = []
 
 aug = transforms.Compose([
         transforms.RandomHorizontalFlip(),
-        #transforms.RandomRotation(10),
-        transforms.ColorJitter(brightness = 0.2)
+        #transforms.RandomRotation(8),
+        transforms.ColorJitter(brightness = 0.4)
     ])
 
 augment_per_image = 2  # how many augmented samples per image

@@ -37,9 +37,7 @@ If you notice a misspelling in a label name SHUT UP SHUT UP DO NOT MENTION IT
 ## Running
 Run this:
 
-``` bash 
-python3 ./preprocess.py
-```
+preprocess.py
 
 Creates a processed folder with the images resized. The size can be changed in process.py
 
@@ -55,7 +53,7 @@ The c++ preprocess file follows the same logic as digit_preprocessor.cpp but wit
 Run this:
 
 ``` bash
-sudo apt install python3-torchvision
+pip install torchvision
 ```
 
 To do stuff yeah
@@ -63,10 +61,13 @@ To do stuff yeah
 ## Running
 
 Run this:
-``` bash
-/usr/bin/python3 augment.py
-```
+
+augment.py
 
 Creates an augmented folder. The amount of augmented samples per image can be changed in augment.py
 
 The augmentations are random brightness shifts and flipping
+
+## Reasoning for augmentation
+
+Due to the data amount some augmentation would be beneficial. I chose brightness and flipping because they are not too severe and will produce smaples that could be produced during inference (At first I also had rotation but that introduces empty black areas which would never be present on real data so I decided not to add that)

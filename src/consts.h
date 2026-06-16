@@ -21,7 +21,7 @@ constexpr size_t cSampleAmount = 5;
 constexpr size_t cModelOutputs = 4;
 constexpr size_t cCountDownLenght = 3;
 constexpr size_t cModelInputWidth = 64;
-constexpr size_t cModelInputHeigth = 64;
+constexpr size_t cModelInputHeight = 64; // corrected Typo here
 constexpr size_t cModelInputChannels = 3;
 
 // camera settings

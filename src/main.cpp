@@ -250,7 +250,7 @@ int RunCameraRPSInference(const ProgramOptions& options,
           return 1;
         }
 
-        // Run digit prediction.
+        // Run outcome prediction.
         preds[i] = classifier->Predict(processed.input);
 
         if (!classifier->ok()) {

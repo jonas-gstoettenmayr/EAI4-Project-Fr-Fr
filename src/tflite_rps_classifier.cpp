@@ -61,22 +61,22 @@ float DequantizeInt8(int8_t value, float scale, int zero_point) {
 
 }  // namespace
 
-struct TfliteDigitClassifier::Impl {
+struct TfliteRPSClassifier::Impl {
   std::unique_ptr<tflite::FlatBufferModel> model;
   std::unique_ptr<tflite::Interpreter> interpreter;
 };
 
 // Creates the classifier and loads the given TensorFlow Lite model.
-TfliteDigitClassifier::TfliteDigitClassifier(const std::string& model_path)
+TfliteRPSClassifier::TfliteRPSClassifier(const std::string& model_path)
     : impl_(std::make_unique<Impl>()) {
   ok_ = Load(model_path);
 }
 
 // Releases classifier resources.
-TfliteDigitClassifier::~TfliteDigitClassifier() = default;
+TfliteRPSClassifier::~TfliteRPSClassifier() = default;
 
 // Loads the model, creates the interpreter, and prepares tensors.
-bool TfliteDigitClassifier::Load(const std::string& model_path) {
+bool TfliteRPSClassifier::Load(const std::string& model_path) {
   // Load the .tflite model from disk.
   impl_->model = tflite::FlatBufferModel::BuildFromFile(model_path.c_str());
 
@@ -135,18 +135,20 @@ bool TfliteDigitClassifier::Load(const std::string& model_path) {
     return false;
   }
 
-  // Check for the expected input shape [1, 28, 28, 1].
+  // Check for the expected input shape [1, cModelInputHeight, cModelInputWidth, cModelInputChannels].
   if (input->dims == nullptr || input->dims->size != 4 ||
-      input->dims->data[0] != 1 || input->dims->data[1] != 28 ||
-      input->dims->data[2] != 28 || input->dims->data[3] != 1) {
-    error_message_ = "Expected input shape [1, 28, 28, 1].";
+      input->dims->data[0] != 1 || 
+      input->dims->data[1] != cModelInputHeight ||
+      input->dims->data[2] != cModelInputWidth || 
+      input->dims->data[3] != cModelInputChannels) {
+    error_message_ = "Expected input shape [1, cModelInputHeight, cModelInputWidth, cModelInputChannels].";
     return false;
   }
 
-  // Check for the expected output shape [1, 10].
+  // Check for the expected output shape [1, 4].
   if (output->dims == nullptr || output->dims->size != 2 ||
-      output->dims->data[0] != 1 || output->dims->data[1] != 10) {
-    error_message_ = "Expected output shape [1, 10].";
+      output->dims->data[0] != 1 || output->dims->data[1] != static_cast<int>(cModelOutputs)) {
+    error_message_ = "Expected output shape [1, 4].";
     return false;
   }
 
@@ -154,35 +156,36 @@ bool TfliteDigitClassifier::Load(const std::string& model_path) {
 }
 
 // Copies float input data into the model input tensor.
-bool TfliteDigitClassifier::CopyInput(
-    const std::vector<float>& normalized_image_28x28) {
-  // Check that the input contains exactly 28 * 28 values.
-  if (normalized_image_28x28.size() != 28U * 28U) {
-    error_message_ = "Expected 28x28 input values.";
+bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
+  constexpr std::size_t kExpectedSize = cModelInputWidth * cModelInputHeight * cModelInputChannels;
+  
+  // Check that the input contains exactly the ModelInputWidth * cModelInputHeight * cModelInputChannels values.
+  if (image.size() != kExpectedSize) {
+    error_message_ = "Expected " + std::to_string(kExpectedSize) + " input pixels, got " + std::to_string(image.size()) + ".";
     return false;
   }
 
   // Get the model input tensor.
   TfLiteTensor* input_tensor = impl_->interpreter->input_tensor(0);
 
-  // Copy float values directly for float32 models.
+  // Normalize uint8 [0,255] → float [0,1] for float32 models.
   if (input_tensor->type == kTfLiteFloat32) {
     float* input = impl_->interpreter->typed_input_tensor<float>(0);
 
-    std::copy(normalized_image_28x28.begin(),
-              normalized_image_28x28.end(),
-              input);
+    for (std::size_t index = 0; index < image.size(); ++index) {
+      input[index] = static_cast<float>(image[index]) / 255.0F;
+    }
 
     return true;
   }
 
-  // Quantize float values before copying for int8 models.
+  // Normalize uint8 [0,255] → float [0,1] for float32 models.
   if (input_tensor->type == kTfLiteInt8) {
     int8_t * input = impl_->interpreter->typed_input_tensor<int8_t>(0);
     
-    for (std::size_t index = 0; index < normalized_image_28x28.size(); ++index) {
+    for (std::size_t index = 0; index < image.size(); ++index) {
       input[index] = QuantizeInt8(
-        normalized_image_28x28[index],
+        static_cast<float>(image[index]) / 255.0F,
         input_tensor->params.scale,
         input_tensor->params.zero_point);
     }
@@ -196,18 +199,18 @@ bool TfliteDigitClassifier::CopyInput(
 }
 
 // Reads the model output tensor and converts probabilities to floats.
-std::vector<float> TfliteDigitClassifier::ReadOutput() const {
+Probabilities TfliteRPSClassifier::ReadOutput() const {
+  Probabilities probabilities;
+
   // Get the model output tensor.
   const TfLiteTensor* output_tensor = impl_->interpreter->output_tensor(0);
 
   // Read float values directly for float32 models.
   if (output_tensor->type == kTfLiteFloat32) {
     const float* output = impl_->interpreter->typed_output_tensor<float>(0);
-    return std::vector<float>(output, output + 10);
+    std::copy(output, output + static_cast<size_t>(cModelOutputs), probabilities.begin());
+    return probabilities;
   }
-
-  // Create one output value for each digit class.
-  std::vector<float> probabilities(10, 0.0F);
 
   // Dequantize int8 values before returning them.
   if (output_tensor->type == kTfLiteInt8) {
@@ -227,12 +230,9 @@ std::vector<float> TfliteDigitClassifier::ReadOutput() const {
   return probabilities;
 }
 
-// Runs inference and returns the most likely digit prediction.
-DigitPrediction TfliteDigitClassifier::Predict(
-    const std::vector<float>& normalized_image_28x28) {
-  DigitPrediction prediction;
-  prediction.digit = -1;
-  prediction.confidence = 0.0F;
+// Runs inference and returns the most likely outcome prediction.
+RPSPrediction TfliteRPSClassifier::Predict(const std::vector<pixel>& image) {
+  RPSPrediction prediction; // Default prediction is reset (3), win=true with 0 confidence.
 
   // Return an empty prediction if loading failed.
   if (!ok_) {
@@ -240,7 +240,7 @@ DigitPrediction TfliteDigitClassifier::Predict(
   }
 
   // Copy the input image into the TensorFlow Lite input tensor.
-  if (!CopyInput(normalized_image_28x28)) {
+  if (!CopyInput(image)) {
     ok_ = false;
     return prediction;
   }
@@ -255,14 +255,28 @@ DigitPrediction TfliteDigitClassifier::Predict(
   // Read the model output as float probabilities.
   prediction.probabilities = ReadOutput();
 
-  // Find the digit with the highest probability.
+  // Find the outcome with the highest probability.
   const auto best = std::max_element(
       prediction.probabilities.begin(),
       prediction.probabilities.end());
 
-  prediction.digit =
-      static_cast<int>(std::distance(prediction.probabilities.begin(), best));
+  prediction.rps = static_cast<int>(std::distance(prediction.probabilities.begin(), best));
   prediction.confidence = *best;
 
+  // For now, we always set win to true. 
+  // In the future, this could be determined based on the model output or other logic.
+  // Don't think I can do that rn? Or am I stupid
+  prediction.win = true;
+
   return prediction;
+}
+
+// Maps model output index to RPS enum.
+RPS ConvertPredToRPS(int pred) {
+  switch (pred) {
+    case 0:  return RPS::rock;
+    case 1:  return RPS::paper;
+    case 2:  return RPS::scissors;
+    default: return RPS::reset;
+  }
 }

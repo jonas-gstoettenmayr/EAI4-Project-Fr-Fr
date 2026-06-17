@@ -1,0 +1,4 @@
+# Condition label mapping (load_multiview -> y_condition)
+# index : name
+0 : without
+1 : with

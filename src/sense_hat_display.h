@@ -19,15 +19,13 @@ class SenseHatDisplay {
   bool ShowRPS(RPS rps, float confidence);
   void ShowWin();
   void ShowLoss();
-  void ShowPrideFlag();
   
   void ShowErrorMarker();
   void Clear();
 
  private:
   bool OpenFramebuffer();
-  void WritePattern(const std::uint8_t pattern[8], std::uint16_t color);
-  std::uint16_t MakeRgb565(std::uint8_t red, std::uint8_t green, std::uint8_t blue) const;
+  void WritePattern(const std::uint16_t pattern[8][8]);
 
   int file_descriptor_ = -1;
   std::size_t mapping_size_ = 0;

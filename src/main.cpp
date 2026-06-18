@@ -251,7 +251,6 @@ int RunCameraRPSInference(const ProgramOptions& options,
           std::this_thread::sleep_for(std::chrono::microseconds(100));
           frame = camera.currentFrame();
         }
-        std::cout << "frame siize" << frame->rgb.size() << std::flush;
         auto proc_start = std::chrono::steady_clock::now();
         PreprocessForRPS(* frame, processed);
         if (!processed.success){
@@ -273,14 +272,14 @@ int RunCameraRPSInference(const ProgramOptions& options,
         mod_mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-mod_start).count();
 
         std::cout << "Predicted gesture: " << ConvertPredToRPS(preds[i].rps) << "\n";
-        std::cout << "Confidence: " << preds[i].confidence << "\n";
+        std::cout << "Confidence: " << preds[i].confidence << "\n\n";
 
         stop = std::chrono::steady_clock::now();
         mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
         std::this_thread::sleep_until(next_tick);
       } // end for
-      std::cout << "Mean Prediction/processing time: " << mean/cSampleAmount << std::endl;
-      std::cout << "Mean Prediction time: " << mod_mean/cSampleAmount << std::endl;
+      std::cout << "Mean Prediction/processing time: " << mean/cSampleAmount << "\n";
+      std::cout << "Mean Prediction time: " << mod_mean/cSampleAmount << "\n";
       std::cout << "Mean Processing time: " << proc_mean/cSampleAmount << std::endl;
 
       // democracy calculations

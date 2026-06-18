@@ -6,6 +6,7 @@
 
 // uncomment to enable debbuing
 // #define DEBUG
+#define TIME
 
 using namespace std::literals::chrono_literals;
 

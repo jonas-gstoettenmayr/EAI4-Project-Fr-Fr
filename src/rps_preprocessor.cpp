@@ -11,6 +11,10 @@
 #include <string>
 #include <cstring>
 
+#ifdef TIME
+  #include <chrono>
+#endif
+
 namespace { // taken 1to1 from preprocess.cpp
 
 std::vector<float> GaussianBlur3x3(const std::vector<float>& input, int width, int height) {
@@ -170,17 +174,17 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
             image.height);
     #endif
 
+    #ifdef TIME
+      auto start = std::chrono::steady_clock::now();
+    #endif
+    
     // only extarcting the active region if specified, otherwise use the whole image
     int crop_h = image.active_height ? image.active_height : image.height;
     int crop_w = image.active_width ? image.active_width : image.width;
+    std::vector<pixel> cropped(crop_w * crop_h * 3);
     if (image.active_width != image.width || image.active_height != image.height){
-      std::cout << "\nCropping images!" << "\n";
-      std::cout << "active width: " << image.active_height << "\n";
-      std::cout << "active height: " << image.active_width << std::endl;
       int crop_x = image.active_width ? image.active_x : 0;
       int crop_y = image.active_height ? image.active_y : 0;
-      
-      result.input.resize(crop_w * crop_h * 3);
       
       // Cache row sizes in bytes
       size_t bytes_per_row_dst = crop_w * 3;
@@ -190,15 +194,20 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
         // starting memory address for the source row and destination row
         
         const pixel * src_row_ptr = &image.rgb[((y + crop_y) * image.width + crop_x) * 3];
-        pixel * dst_row_ptr = &result.input[y * crop_w * 3];
+        pixel * dst_row_ptr = &cropped[y * crop_w * 3];
         
         // block copy
         std::memcpy(dst_row_ptr, src_row_ptr, bytes_per_row_dst);
       } 
 
     } else {
-      result.input = image.rgb;
+      cropped = image.rgb;
     }
+    #ifdef TIME
+      auto stop = std::chrono::steady_clock::now();
+      std::cout << "Cropping Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
+    #endif
+    
 
     #ifdef DEBUG
         SaveDebugImage("debug_02_crop.bmp", cropped, crop_w, crop_h);
@@ -211,12 +220,26 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
     // This is done bc it's a lot easier to work with float
     // than with the u_int8 values
     // they are converted back later on in the process
+    #ifdef TIME
+      start = std::chrono::steady_clock::now();
+    #endif
     std::vector<float> r,g,b;
-    SplitNormalize(result.input, crop_w, crop_h, r,g,b);
-
+    SplitNormalize(cropped, crop_w, crop_h, r,g,b);
+    #ifdef TIME
+      stop = std::chrono::steady_clock::now();
+      std::cout << "Normalize Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
+    #endif
+    
+    #ifdef TIME
+      start = std::chrono::steady_clock::now();
+    #endif
     r = GaussianBlur3x3(r, crop_w, crop_h);
     g = GaussianBlur3x3(g, crop_w, crop_h);
     b = GaussianBlur3x3(b, crop_w, crop_h);
+    #ifdef TIME
+      stop = std::chrono::steady_clock::now();
+      std::cout << "Gaussian Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
+    #endif
 
     #ifdef DEBUG
         SaveDebugImage(
@@ -226,9 +249,16 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
     #endif
 
     // sesize to model input 
+    #ifdef TIME
+      start = std::chrono::steady_clock::now();
+    #endif
     r = ResizeBilinear(r, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
     g = ResizeBilinear(g, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
     b = ResizeBilinear(b, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
+    #ifdef TIME
+      stop = std::chrono::steady_clock::now();
+      std::cout << "Resiize Bilinear Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
+    #endif
 
     #ifdef DEBUG
         SaveDebugImage(

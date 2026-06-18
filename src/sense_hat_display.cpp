@@ -17,6 +17,7 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 using namespace std;
 using namespace chrono_literals;
@@ -296,6 +297,7 @@ bool SenseHatDisplay::ShowRPS(RPS rps, float confidence)
   }
   if(rps == 0)
   {
+    std::cout << "Showing Rock" << std::flush;
     WritePattern(r);
     sleep_for(cShowGestureTime);
     Clear();
@@ -303,6 +305,7 @@ bool SenseHatDisplay::ShowRPS(RPS rps, float confidence)
   }
   if(rps == 1)
   {
+    std::cout << "Showing Ppr" << std::flush;
     WritePattern(p);
     sleep_for(cShowResultTime);
     Clear();
@@ -310,6 +313,7 @@ bool SenseHatDisplay::ShowRPS(RPS rps, float confidence)
   }
   if(rps == 2)
   {
+    std::cout << "Showing ✄" << std::flush;
     WritePattern(s);
     sleep_for(cShowResultTime);
     Clear();
@@ -317,6 +321,7 @@ bool SenseHatDisplay::ShowRPS(RPS rps, float confidence)
   }
   if(rps == 3)
   {
+    std::cout << "Showing Pride" << std::flush;
     WritePattern(gayflag);
     sleep_for(cShowResultTime);
     Clear();

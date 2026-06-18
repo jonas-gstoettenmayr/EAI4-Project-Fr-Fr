@@ -1,13 +1,18 @@
 #include "rps_preprocessor.h"
 #include "consts.h"
+#include "bmp_image.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <iostream>
+#include <string>
 
 namespace { // taken 1to1 from preprocess.cpp
+
+static constexpr bool kDebug = false; // or the every step image stuff
 
 std::vector<float> GaussianBlur3x3(const std::vector<float>& input, int width, int height) {
   std::vector<float> output(static_cast<std::size_t>(width * height), 0.0F);
@@ -93,80 +98,146 @@ std::vector<pixel> ProcessChannels(std::vector<float> r, std::vector<float> g, s
 
     for (std::size_t i = 0; i < kPixelCount; ++i) {
       // clamp directly in lround
-        output[i * 3U + 0U] = static_cast<pixel>(std::lround(std::clamp(r[i], 0.0F, 1.0F) * 255.0F));
-        output[i * 3U + 1U] = static_cast<pixel>(std::lround(std::clamp(g[i], 0.0F, 1.0F) * 255.0F));
-        output[i * 3U + 2U] = static_cast<pixel>(std::lround(std::clamp(b[i], 0.0F, 1.0F) * 255.0F));
+        output[i * 3U + 0U] = static_cast<pixel>(std::lround(std::clamp(r[i], 0.0F, 1.0F)));
+        output[i * 3U + 1U] = static_cast<pixel>(std::lround(std::clamp(g[i], 0.0F, 1.0F)));
+        output[i * 3U + 2U] = static_cast<pixel>(std::lround(std::clamp(b[i], 0.0F, 1.0F)));
     }
 
     return output;
 }
 
-// Splits a tightly-packed interleaved uint8 RGB buffer into three float
-// channels normalized to [0,1]. No stride — assumes width*3 bytes per row.
-void SplitInterleavedRgb(const std::vector<pixel>& rgb, int width, int height,
-                          std::vector<float>* r, std::vector<float>* g, std::vector<float>* b) {
-  const std::size_t kPixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+// -----------------------------
+// Debug BMP saver - debug was mostly helped from chatty for obvi reasons
+// ----------------------------- 
+void SaveDebugImage(const std::string& name,
+                    const std::vector<uint8_t>& rgb,
+                    int w, int h)
+{
+    SaveBmp24(name, rgb, w, h);
 
-  r->resize(kPixelCount);
-  g->resize(kPixelCount);
-  b->resize(kPixelCount);
+    if (kDebug){
+        std::cout << "[DEBUG] saved " << name
+                  << " (" << w << "x" << h << ")\n";
+    }
+}
 
-  for (std::size_t i = 0; i < kPixelCount; ++i) {
-    (*r)[i] = static_cast<float>(rgb[i * 3U + 0U]) / 255.0F;
-    (*g)[i] = static_cast<float>(rgb[i * 3U + 1U]) / 255.0F;
-    (*b)[i] = static_cast<float>(rgb[i * 3U + 2U]) / 255.0F;
-  }
+// Split RGB and NORMALIZE (IMPORTANT FIX)
+void SplitNormalize(const std::vector<uint8_t>& rgb, int w, int h, std::vector<float>& r, std::vector<float>& g, std::vector<float>& b){
+    size_t n = w * h;
+    r.resize(n);
+    g.resize(n);
+    b.resize(n);
+
+    for (size_t i = 0; i < n; i++)
+    { // same here with the 255
+        r[i] = rgb[i*3 + 0] / 255.0f;
+        g[i] = rgb[i*3 + 1] / 255.0f;
+        b[i] = rgb[i*3 + 2] / 255.0f;
+    }
+}
+
+// Merge channels into RGB uint8
+std::vector<uint8_t> MergeRGB(const std::vector<float>& r,const std::vector<float>& g,const std::vector<float>& b){
+    size_t n = r.size();
+    std::vector<uint8_t> out(n * 3);
+
+    for (size_t i = 0; i < n; i++)
+    { // ik you said no more normalization 
+      // but this is the only reason it works so please leave the 255 lol
+        out[i*3+0] = (uint8_t)std::lround(std::clamp(r[i], 0.f, 1.f) * 255.f);
+        out[i*3+1] = (uint8_t)std::lround(std::clamp(g[i], 0.f, 1.f) * 255.f);
+        out[i*3+2] = (uint8_t)std::lround(std::clamp(b[i], 0.f, 1.f) * 255.f);
+    }
+
+    return out;
 }
 
 }  // namespace
 
-PreprocessResult PreprocessForRPS(const rpicam::RgbFrame& image) {
-  PreprocessResult result;
+PreprocessResult PreprocessForRPS(const rpicam::RgbFrame& image)
+{
+    PreprocessResult result;
 
-  if (image.width == 0 || image.height == 0 || image.rgb.empty()) {
-    result.error_message = "Input frame is empty.";
-    return result;
-  }
-
-  const std::size_t expected_size = static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 3U;
-
-  if (image.rgb.size() != expected_size) {
-    result.error_message = "Input frame size does not match its dimensions :/.";
-    return result;
-  }
-
-  // Determine the active (non-letterboxed) region. If active_width/height are unset (0), the whole frame is active.
-  const unsigned int crop_x = image.active_width > 0 ? image.active_x : 0;
-  const unsigned int crop_y = image.active_height > 0 ? image.active_y : 0;
-  const unsigned int crop_w = image.active_width > 0 ? image.active_width : image.width;
-  const unsigned int crop_h = image.active_height > 0 ? image.active_height : image.height;
-
-  if (crop_x + crop_w > image.width || crop_y + crop_h > image.height) {
-    result.error_message = "Active region exceeds frame bounds.";
-    return result;
-  }
-
-  // Extract and normalize the active region into separate channels.
-  std::vector<float> chan_r(static_cast<std::size_t>(crop_w) * crop_h);
-  std::vector<float> chan_g(static_cast<std::size_t>(crop_w) * crop_h);
-  std::vector<float> chan_b(static_cast<std::size_t>(crop_w) * crop_h);
-
-  for (unsigned int y = 0; y < crop_h; ++y) {
-    const std::size_t src_row = (static_cast<std::size_t>(crop_y + y) * image.width + crop_x) * 3U;
-    const std::size_t dst_row = static_cast<std::size_t>(y) * crop_w;
-
-    for (unsigned int x = 0; x < crop_w; ++x) {
-      const std::size_t src_index = src_row + static_cast<std::size_t>(x) * 3U;
-      const std::size_t dst_index = dst_row + x;
-
-      chan_r[dst_index] = static_cast<float>(image.rgb[src_index + 0U]) / 255.0F;
-      chan_g[dst_index] = static_cast<float>(image.rgb[src_index + 1U]) / 255.0F;
-      chan_b[dst_index] = static_cast<float>(image.rgb[src_index + 2U]) / 255.0F;
+    if (image.rgb.empty()){
+        result.error_message = "empty input";
+        return result;
     }
-  }
 
+    if (kDebug){
+        SaveDebugImage(
+            "debug_01_input.bmp",
+            image.rgb,
+            image.width,
+            image.height);
+    }
 
-  result.input = ProcessChannels(chan_r, chan_g, chan_b, static_cast<int>(crop_w), static_cast<int>(crop_h));
-  result.success = true;
-  return result;
+    // only extarcting the active region if specified, otherwise use the whole image
+    int crop_x = image.active_width ? image.active_x : 0;
+    int crop_y = image.active_height ? image.active_y : 0;
+    int crop_w = image.active_width ? image.active_width : image.width;
+    int crop_h = image.active_height ? image.active_height : image.height;
+
+    std::vector<uint8_t> cropped(crop_w * crop_h * 3);
+
+    for (int y = 0; y < crop_h; y++)
+      for (int x = 0; x < crop_w; x++){
+          int src = ((y + crop_y) * image.width + (x + crop_x)) * 3;
+          int dst = (y * crop_w + x) * 3;
+
+          cropped[dst+0] = image.rgb[src+0];
+          cropped[dst+1] = image.rgb[src+1];
+          cropped[dst+2] = image.rgb[src+2];
+      }
+
+    if (kDebug){
+        SaveDebugImage("debug_02_crop.bmp", cropped, crop_w, crop_h);
+    }
+
+    // For Jonas: Ik you said no more normalization but 
+    // legit the only reason it now works is bc of this fix
+    // be mercifull *prayge*
+
+    // This is done bc it's a lot easier to work with float
+    // than with the u_int8 values
+    // they are converted back later on in the process
+    std::vector<float> r,g,b;
+    SplitNormalize(cropped, crop_w, crop_h, r,g,b);
+
+    r = GaussianBlur3x3(r, crop_w, crop_h);
+    g = GaussianBlur3x3(g, crop_w, crop_h);
+    b = GaussianBlur3x3(b, crop_w, crop_h);
+
+    if (kDebug){
+        SaveDebugImage(
+            "debug_03_blur.bmp",
+            MergeRGB(r,g,b),
+            crop_w, crop_h);
+    }
+
+    // sesize to model input 
+    r = ResizeBilinear(r, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
+    g = ResizeBilinear(g, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
+    b = ResizeBilinear(b, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
+
+    if (kDebug){
+        SaveDebugImage(
+            "debug_04_resize.bmp",
+            MergeRGB(r,g,b),
+            cModelInputWidth,
+            cModelInputHeight);
+    }
+
+    // here it goes back to uint8 and interleaved as RGB
+    result.input = MergeRGB(r,g,b);
+    result.success = true;
+
+    if (kDebug){
+        SaveDebugImage(
+            "debug_05_final.bmp",
+            result.input,
+            cModelInputWidth,
+            cModelInputHeight);
+    }
+
+    return result;
 }

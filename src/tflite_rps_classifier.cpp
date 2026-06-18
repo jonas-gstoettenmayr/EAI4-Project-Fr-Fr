@@ -173,7 +173,7 @@ bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
     float* input = impl_->interpreter->typed_input_tensor<float>(0);
 
     for (std::size_t index = 0; index < image.size(); ++index) {
-      input[index] = static_cast<float>(image[index]) / 255.0F;
+      input[index] = static_cast<float>(image[index]);
     }
 
     return true;
@@ -185,7 +185,7 @@ bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
     
     for (std::size_t index = 0; index < image.size(); ++index) {
       input[index] = QuantizeInt8(
-        static_cast<float>(image[index]) / 255.0F,
+        static_cast<float>(image[index]),
         input_tensor->params.scale,
         input_tensor->params.zero_point);
     }

@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <string>
 
 typedef uint8_t pixel;
 
@@ -12,3 +13,8 @@ struct BmpImage {
 };
 
 BmpImage LoadBmp24(const std::string& path);
+
+void SaveBmp24(const std::string& path,
+               const std::vector<pixel>& rgb,
+               int width,
+               int height);

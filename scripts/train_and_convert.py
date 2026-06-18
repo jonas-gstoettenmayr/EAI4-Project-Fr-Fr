@@ -5,7 +5,6 @@ import argparse
 import csv
 import os
 import shutil
-import struct
 from pathlib import Path
 from typing import Any
 import sys
@@ -17,9 +16,10 @@ os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 
 import numpy as np
 import tensorflow as tf
-from dataloader import load_7class, load_multiclasses_paths, CONDITION_NAMES, GESTURE_NAMES
+from dataloader import load_multiclasses_paths, CONDITION_NAMES, GESTURE_NAMES
 
-DISTILL_EPOCHS = 3
+tf.keras.utils.set_random_seed(3407)
+
 
 def require_tfmot():
     try:
@@ -39,20 +39,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--artifacts-dir", default="artifacts")
     parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--finetune-epochs", type=int, default=1)
-    parser.add_argument("--cluster-finetune-epochs", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--conv-filters", type=int, default=16)
-    parser.add_argument("--dense-units", type=int, default=64)
-    parser.add_argument("--synapse-prune-ratio", type=float, default=0.70)
-    parser.add_argument("--neuron-prune-ratio", type=float, default=0.50)
-    parser.add_argument("--channel-prune-ratio", type=float, default=0.50)
     parser.add_argument("--validation-split", type=float, default=0.20)
     parser.add_argument("--test-split", type=float, default=0.25)
-    parser.add_argument("--kmeans-k", type=int, default=16)
     parser.add_argument("--representative-samples", type=int, default=256)
     parser.add_argument("--tflite-eval-samples", type=int, default=0)
-    parser.add_argument("--test-digit-index", type=int, default=0)
     parser.add_argument("--early-stopping-patience", type=int, default=20)
     parser.add_argument("--lr-reduce-patience", type=int, default=4)
     parser.add_argument("--lr-reduce-factor", type=float, default=0.5)
@@ -172,8 +163,11 @@ def save_confusion_matrices(model, dataset, artifacts_dir):
 
 # Data
 
+def split_train_validation(x: np.ndarray, y: np.ndarray, validation_split: float):
+    return train_test_split(x, y, test_size=validation_split, shuffle=True, random_state=42)
+
 def load_and_preprocess(path, label_gesture, label_condition, size = 224):
-    """Loads one image from disk and normalises it."""
+    """Loads one image from disk"""
     raw   = tf.io.read_file(path)
     image = tf.image.decode_bmp(raw, channels=3)
     image = tf.cast(image, tf.uint8) #/ 255.0
@@ -197,15 +191,8 @@ def make_dataset(paths, yg, yc, batch_size, shuffle=False, use_augment = False):
     ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     return ds
 
-def split_train_validation(x: np.ndarray, y: np.ndarray, validation_split: float):
-    return train_test_split(x, y, test_size=validation_split, shuffle=True, random_state=42)
-
 
 # Modeling
-
-def compile_model(model: tf.keras.Model) -> tf.keras.Model:
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-    return model
 
 
 def make_model_mobilenet_multihead(img_size: int, num_classes1: int) -> tf.keras.Model:
@@ -246,93 +233,6 @@ def make_model_mobilenet_multihead(img_size: int, num_classes1: int) -> tf.keras
         metrics=["accuracy"],
     )
     return model
-
-
-
-# Student Models - not needed. For Mobilenet only another mobilenet would make sense but with smaller alpha
-
-def make_student_model_multihead(num_classes_head1: int) -> tf.keras.Model:
-    inputs = tf.keras.Input(shape=(224, 224, 3), name="image")
-    x = tf.keras.layers.Conv2D(8,  3, activation="relu", name="conv1")(inputs)
-    x = tf.keras.layers.MaxPooling2D(name="pool1")(x)
-    x = tf.keras.layers.Conv2D(16, 3, activation="relu", name="conv2")(x)
-    x = tf.keras.layers.MaxPooling2D(name="pool2")(x)
-    x = tf.keras.layers.Flatten(name="flatten")(x)
-    x = tf.keras.layers.Dense(16, activation="relu", name="hidden1")(x)
-    x = tf.keras.layers.Dense(8,  activation="relu", name="hidden2")(x)
-    out1 = tf.keras.layers.Dense(num_classes_head1, activation="softmax", name="output_head1")(x)
-    out2 = tf.keras.layers.Dense(1, activation="sigmoid", name="output_head2")(x)
-    model = tf.keras.Model(inputs, [out1, out2], name="student_multihead")
-    model.compile(
-        optimizer="adam",
-        loss=["sparse_categorical_crossentropy", "binary_crossentropy"],
-        loss_weights=[1.0, 1.0],
-        metrics=["accuracy"],
-    )
-    return model
-
-
-# Some more student stuff
-
-def finetune(model: tf.keras.Model, x: np.ndarray, y: np.ndarray, epochs: int, batch_size: int) -> None:
-    if epochs > 0:
-        model.fit(x, y, epochs=epochs, batch_size=batch_size, verbose=2, shuffle=True)
-
-
-def soften(probabilities: tf.Tensor, temperature: float) -> tf.Tensor:
-    return tf.nn.softmax(tf.math.log(tf.clip_by_value(probabilities, 1e-7, 1.0)) / temperature, axis=-1)
-
-
-
-def distill_student_multihead(teacher: tf.keras.Model, student: tf.keras.Model, x: np.ndarray, y: np.ndarray, epochs: int, batch_size: int) -> None:
-    """Distills both teacher heads into corresponding student heads."""
-    if epochs <= 0:
-        return
-    was_trainable = teacher.trainable
-    teacher.trainable = False
-
-    teacher_head1 = tf.keras.Model(teacher.input, teacher.get_layer("output_head1").output)
-    teacher_head2 = tf.keras.Model(teacher.input, teacher.get_layer("output_head2").output)
-
-    optimizer  = tf.keras.optimizers.Adam()
-    hard_loss  = tf.keras.losses.SparseCategoricalCrossentropy()
-    soft_loss  = tf.keras.losses.KLDivergence()
-    dataset    = tf.data.Dataset.from_tensor_slices((x, y)).shuffle(len(x), seed=42, reshuffle_each_iteration=True).batch(batch_size)
-    temperature = 4.0
-    alpha       = 0.5
-
-    for epoch in range(1, epochs + 1):
-        losses: list[float] = []
-        for batch_x, batch_y in dataset:
-            t_soft1 = soften(teacher_head1(batch_x, training=False), temperature)
-            t_soft2 = soften(teacher_head2(batch_x, training=False), temperature)
-            with tf.GradientTape() as tape:
-                s_out1, s_out2 = student(batch_x, training=True)
-                loss = (
-                    alpha * hard_loss(batch_y, s_out1)
-                    + (1.0 - alpha) * soft_loss(t_soft1, soften(s_out1, temperature)) * (temperature ** 2)
-                    + 0.5 * (
-                        alpha * hard_loss(batch_y, s_out2)
-                        + (1.0 - alpha) * soft_loss(t_soft2, soften(s_out2, temperature)) * (temperature ** 2)
-                    )
-                )
-            optimizer.apply_gradients(zip(tape.gradient(loss, student.trainable_variables), student.trainable_variables))
-            losses.append(float(loss.numpy()))
-        print(f"distill multihead epoch {epoch}/{epochs} loss={float(np.mean(losses)):.4f}")
-
-    teacher.trainable = was_trainable
-    student.compile(
-        optimizer="adam",
-        loss=["sparse_categorical_crossentropy", "binary_crossentropy"],
-        loss_weights=[1.0, 1.0],
-        metrics=["accuracy"],
-    )
-
-
-def distill_then_finetune(teacher: tf.keras.Model, student: tf.keras.Model, x: np.ndarray, y: np.ndarray, finetune_epochs: int, batch_size: int) -> None:
-    distill_student_multihead(teacher, student, x, y, DISTILL_EPOCHS, batch_size)
-    finetune(student, x, y, finetune_epochs, batch_size)
-
 
 #Evaluation
 
@@ -447,7 +347,7 @@ def evaluate_keras(model: tf.keras.Model, x_val: np.ndarray, y_val: np.ndarray, 
 def append_model(models: list[dict[str, Any]], name: str, method: str, model: tf.keras.Model, mode: str = "fp32") -> None:
     models.append({"name": name, "method": method, "model": model, "mode": mode})
 
-# for evaluation
+
 def paths_to_numpy(paths: np.ndarray, limit: int = 0) -> np.ndarray:
     """Load a set of image paths into a numpy array (use only for small sets)."""
     subset = paths[:limit] if limit > 0 else paths
@@ -469,7 +369,6 @@ class MemoryCallback(tf.keras.callbacks.Callback):
 
 def main() -> int:
     args = parse_args()
-    clustering = require_tfmot()
     tf.keras.utils.set_random_seed(42)
     np.random.seed(42)
 

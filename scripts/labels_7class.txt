@@ -1,9 +1,0 @@
-# 7-class label mapping (load_7class)
-# index : name
-0 : without_rock
-1 : without_paper
-2 : without_sissors
-3 : with_rock
-4 : with_paper
-5 : with_sissors
-6 : gay

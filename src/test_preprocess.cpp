@@ -97,7 +97,8 @@ int main2(int argc, char** argv) {
   // active_* left at 0 → whole frame is treated as active region.
 
   // Run preprocessing.
-  const PreprocessResult result = PreprocessForRPS(frame);
+  PreprocessResult result;
+  PreprocessForRPS(frame, result);
   std::cout << "Actual output size: "
           << result.input.size()
           << '\n';

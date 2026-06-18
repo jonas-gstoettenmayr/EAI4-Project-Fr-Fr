@@ -142,7 +142,8 @@ bool LoadRPSInput(const std::string& image_path,
   }
   rpicam::RgbFrame frame;
   ConvertBMPIImageToFrame(image, frame);
-  PreprocessResult preprocess = PreprocessForRPS(frame);
+  PreprocessResult preprocess;
+  PreprocessForRPS(frame, preprocess);
 
   if (!preprocess.success) {
     std::cerr << "Preprocessing failed: " << preprocess.error_message << "\n";
@@ -234,24 +235,25 @@ int RunCameraRPSInference(const ProgramOptions& options,
       double mean = 0.0;
       double mod_mean = 0.0;
       double proc_mean = 0.0;
-
+      
       // Get current image to framebuffer.
       display.StartCountDown(cCountDownLenght);
       
       std::array<RPSPrediction, cSampleAmount> preds;
       auto next_tick = std::chrono::steady_clock::now(); // current time
+      PreprocessResult processed;
       for(size_t i = 0; i < cSampleAmount; i++) {
         next_tick += cWaitTime;
         auto start = std::chrono::steady_clock::now();
 
         std::shared_ptr<const rpicam::RgbFrame> frame = camera.currentFrame();
         while (!frame) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-            frame = camera.currentFrame();
+          std::this_thread::sleep_for(std::chrono::microseconds(100));
+          frame = camera.currentFrame();
         }
-
+        std::cout << "frame siize" << frame->rgb.size() << std::flush;
         auto proc_start = std::chrono::steady_clock::now();
-        auto processed = PreprocessForRPS(*frame);
+        PreprocessForRPS(* frame, processed);
         if (!processed.success){
           std::cerr << "Error: " << processed.error_message << "\n";
           return 1;

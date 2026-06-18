@@ -4,6 +4,9 @@
 #include <string>
 #include <chrono>
 
+// uncomment to enable debbuing
+// #define DEBUG
+
 using namespace std::literals::chrono_literals;
 
 // type of the image headers
@@ -28,7 +31,7 @@ constexpr size_t cModelInputChannels = 3;
 
 // camera settings
 constexpr std::chrono::milliseconds cCaptureTimeoutMs = 2500ms;
-constexpr size_t cFPS = 25;
+constexpr size_t cFPS = 5;
 constexpr auto cWaitTime = std::chrono::milliseconds(1000/cFPS);
 constexpr int cCaptureWidth = 512;
 constexpr int cCaptureHeight = 512;

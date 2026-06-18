@@ -9,10 +9,9 @@
 #include <vector>
 #include <iostream>
 #include <string>
+#include <cstring>
 
 namespace { // taken 1to1 from preprocess.cpp
-
-static constexpr bool kDebug = false; // or the every step image stuff
 
 std::vector<float> GaussianBlur3x3(const std::vector<float>& input, int width, int height) {
   std::vector<float> output(static_cast<std::size_t>(width * height), 0.0F);
@@ -106,6 +105,7 @@ std::vector<pixel> ProcessChannels(std::vector<float> r, std::vector<float> g, s
     return output;
 }
 
+#ifdef DEBUG
 // -----------------------------
 // Debug BMP saver - debug was mostly helped from chatty for obvi reasons
 // ----------------------------- 
@@ -115,11 +115,12 @@ void SaveDebugImage(const std::string& name,
 {
     SaveBmp24(name, rgb, w, h);
 
-    if (kDebug){
-        std::cout << "[DEBUG] saved " << name
-                  << " (" << w << "x" << h << ")\n";
-    }
+    
+    std::cout << "[DEBUG] saved " << name
+              << " (" << w << "x" << h << ")\n";
+
 }
+#endif
 
 // Split RGB and NORMALIZE (IMPORTANT FIX)
 void SplitNormalize(const std::vector<uint8_t>& rgb, int w, int h, std::vector<float>& r, std::vector<float>& g, std::vector<float>& b){
@@ -154,44 +155,54 @@ std::vector<uint8_t> MergeRGB(const std::vector<float>& r,const std::vector<floa
 
 }  // namespace
 
-PreprocessResult PreprocessForRPS(const rpicam::RgbFrame& image)
+void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
 {
-    PreprocessResult result;
-
     if (image.rgb.empty()){
         result.error_message = "empty input";
-        return result;
+        return;
     }
 
-    if (kDebug){
+    #ifdef DEBUG
         SaveDebugImage(
             "debug_01_input.bmp",
             image.rgb,
             image.width,
             image.height);
-    }
+    #endif
 
     // only extarcting the active region if specified, otherwise use the whole image
-    int crop_x = image.active_width ? image.active_x : 0;
-    int crop_y = image.active_height ? image.active_y : 0;
-    int crop_w = image.active_width ? image.active_width : image.width;
     int crop_h = image.active_height ? image.active_height : image.height;
+    int crop_w = image.active_width ? image.active_width : image.width;
+    if (image.active_width != image.width || image.active_height != image.height){
+      std::cout << "\nCropping images!" << "\n";
+      std::cout << "active width: " << image.active_height << "\n";
+      std::cout << "active height: " << image.active_width << std::endl;
+      int crop_x = image.active_width ? image.active_x : 0;
+      int crop_y = image.active_height ? image.active_y : 0;
+      
+      result.input.resize(crop_w * crop_h * 3);
+      
+      // Cache row sizes in bytes
+      size_t bytes_per_row_dst = crop_w * 3;
+      
+      // Only rows loop and copy, faster
+      for (int y = 0; y < crop_h; y++) {
+        // starting memory address for the source row and destination row
+        
+        const pixel * src_row_ptr = &image.rgb[((y + crop_y) * image.width + crop_x) * 3];
+        pixel * dst_row_ptr = &result.input[y * crop_w * 3];
+        
+        // block copy
+        std::memcpy(dst_row_ptr, src_row_ptr, bytes_per_row_dst);
+      } 
 
-    std::vector<uint8_t> cropped(crop_w * crop_h * 3);
-
-    for (int y = 0; y < crop_h; y++)
-      for (int x = 0; x < crop_w; x++){
-          int src = ((y + crop_y) * image.width + (x + crop_x)) * 3;
-          int dst = (y * crop_w + x) * 3;
-
-          cropped[dst+0] = image.rgb[src+0];
-          cropped[dst+1] = image.rgb[src+1];
-          cropped[dst+2] = image.rgb[src+2];
-      }
-
-    if (kDebug){
-        SaveDebugImage("debug_02_crop.bmp", cropped, crop_w, crop_h);
+    } else {
+      result.input = image.rgb;
     }
+
+    #ifdef DEBUG
+        SaveDebugImage("debug_02_crop.bmp", cropped, crop_w, crop_h);
+    #endif
 
     // For Jonas: Ik you said no more normalization but 
     // legit the only reason it now works is bc of this fix
@@ -201,45 +212,43 @@ PreprocessResult PreprocessForRPS(const rpicam::RgbFrame& image)
     // than with the u_int8 values
     // they are converted back later on in the process
     std::vector<float> r,g,b;
-    SplitNormalize(cropped, crop_w, crop_h, r,g,b);
+    SplitNormalize(result.input, crop_w, crop_h, r,g,b);
 
     r = GaussianBlur3x3(r, crop_w, crop_h);
     g = GaussianBlur3x3(g, crop_w, crop_h);
     b = GaussianBlur3x3(b, crop_w, crop_h);
 
-    if (kDebug){
+    #ifdef DEBUG
         SaveDebugImage(
             "debug_03_blur.bmp",
             MergeRGB(r,g,b),
             crop_w, crop_h);
-    }
+    #endif
 
     // sesize to model input 
     r = ResizeBilinear(r, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
     g = ResizeBilinear(g, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
     b = ResizeBilinear(b, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
 
-    if (kDebug){
+    #ifdef DEBUG
         SaveDebugImage(
             "debug_04_resize.bmp",
             MergeRGB(r,g,b),
             cModelInputWidth,
             cModelInputHeight);
-    }
+    #endif
 
     // here it goes back to uint8 and interleaved as RGB
     result.input = MergeRGB(r,g,b);
     result.success = true;
 
-    if (kDebug){
+    #ifdef DEBUG
         SaveDebugImage(
             "debug_05_final.bmp",
             result.input,
             cModelInputWidth,
             cModelInputHeight);
-    }
-
-    return result;
+    #endif
 }
 
 void ConvertBMPIImageToFrame(const BmpImage & image, rpicam::RgbFrame & frame){

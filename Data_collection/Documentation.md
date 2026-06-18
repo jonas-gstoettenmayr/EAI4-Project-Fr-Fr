@@ -49,25 +49,4 @@ The c++ preprocess file follows the same logic as digit_preprocessor.cpp but wit
 
 # Augmentation
 
-## Setup
-Run this:
-
-``` bash
-pip install torchvision
-```
-
-To do stuff yeah
-
-## Running
-
-Run this:
-
-augment.py
-
-Creates an augmented folder. The amount of augmented samples per image can be changed in augment.py
-
-The augmentations are random brightness shifts and flipping
-
-## Reasoning for augmentation
-
-Due to the data amount some augmentation would be beneficial. I chose brightness and flipping because they are not too severe and will produce smaples that could be produced during inference (At first I also had rotation but that introduces empty black areas which would never be present on real data so I decided not to add that)
+The augmentation is in train_and_convert.py

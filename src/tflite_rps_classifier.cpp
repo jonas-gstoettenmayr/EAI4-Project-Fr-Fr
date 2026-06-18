@@ -110,7 +110,7 @@ bool TfliteRPSClassifier::Load(const std::string& model_path) {
   }
 
   // Require exactly one output tensor.
-  if (impl_->interpreter->outputs().size() != 1) {
+  if (impl_->interpreter->outputs().size() != 2) {
     error_message_ = "The model must have exactly one output tensor.";
     return false;
   }
@@ -118,6 +118,7 @@ bool TfliteRPSClassifier::Load(const std::string& model_path) {
   // Get the input and output tensors.
   const TfLiteTensor* input = impl_->interpreter->input_tensor(0);
   const TfLiteTensor* output = impl_->interpreter->output_tensor(0);
+  const TfLiteTensor* output2 = impl_->interpreter->output_tensor(1);
 
   // Check that the input tensor is float32 or int8.
   if (input == nullptr || !IsSupportedTensorType(input->type)) {
@@ -128,7 +129,7 @@ bool TfliteRPSClassifier::Load(const std::string& model_path) {
   }
 
   // Check that the output tensor is float32 or int8.
-  if (output == nullptr || !IsSupportedTensorType(output->type)) {
+  if (output == nullptr || !IsSupportedTensorType(output->type) || output2 == nullptr || !IsSupportedTensorType(output2->type)) {
     error_message_ = "The model output must be float32 or int8; got ";
     error_message_ += output == nullptr ? "null" : TensorTypeName(output->type);
     error_message_ += ".";
@@ -149,6 +150,12 @@ bool TfliteRPSClassifier::Load(const std::string& model_path) {
   if (output->dims == nullptr || output->dims->size != 2 ||
       output->dims->data[0] != 1 || output->dims->data[1] != static_cast<int>(cModelOutputs)) {
     error_message_ = "Expected output shape [1, 4].";
+    return false;
+  }
+  // Check for the expected output2 shape [1, 1].
+  if (output->dims == nullptr || output->dims->size != 2 ||
+      output->dims->data[0] != 1 || output->dims->data[1] != static_cast<int>(cModelOutputs)) {
+    error_message_ = "Expected c output shape [1, 4].";
     return false;
   }
 
@@ -173,7 +180,7 @@ bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
     float* input = impl_->interpreter->typed_input_tensor<float>(0);
 
     for (std::size_t index = 0; index < image.size(); ++index) {
-      input[index] = static_cast<float>(image[index]);
+      input[index] = static_cast<float>(image[index]);// / 255.0F;
     }
 
     return true;
@@ -185,7 +192,7 @@ bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
     
     for (std::size_t index = 0; index < image.size(); ++index) {
       input[index] = QuantizeInt8(
-        static_cast<float>(image[index]),
+        static_cast<float>(image[index]),// / 255.0F,
         input_tensor->params.scale,
         input_tensor->params.zero_point);
     }
@@ -199,17 +206,24 @@ bool TfliteRPSClassifier::CopyInput(const std::vector<pixel>& image) {
 }
 
 // Reads the model output tensor and converts probabilities to floats.
-Probabilities TfliteRPSClassifier::ReadOutput() const {
+ProbWWin TfliteRPSClassifier::ReadOutput() const {
   Probabilities probabilities;
 
   // Get the model output tensor.
   const TfLiteTensor* output_tensor = impl_->interpreter->output_tensor(0);
+  const TfLiteTensor* win_tensor = impl_->interpreter->output_tensor(1);
+
 
   // Read float values directly for float32 models.
   if (output_tensor->type == kTfLiteFloat32) {
     const float* output = impl_->interpreter->typed_output_tensor<float>(0);
     std::copy(output, output + static_cast<size_t>(cModelOutputs), probabilities.begin());
-    return probabilities;
+
+    const TfLiteTensor* win_tensor = impl_->interpreter->output_tensor(1);
+    float* sigmoid_data = win_tensor->data.f;
+    float win_probability = sigmoid_data[0];
+
+    return {probabilities, win_probability};
   }
 
   // Dequantize int8 values before returning them.
@@ -223,11 +237,19 @@ Probabilities TfliteRPSClassifier::ReadOutput() const {
         output_tensor->params.zero_point);
     }
 
-    return probabilities;
+    const int8_t* sigmoid_output = impl_->interpreter->typed_output_tensor<int8_t>(1); // Index 1!
+    
+    // Sigmoid usually yields a single scalar float output per batch item
+    float win_probability = DequantizeInt8(
+        sigmoid_output[0], 
+        win_tensor->params.scale, 
+        win_tensor->params.zero_point
+    );
+    return {probabilities, win_probability};
   }
 
   // This should not happen because Load validates the tensor type.
-  return probabilities;
+  return {probabilities, 0.0};
 }
 
 // Runs inference and returns the most likely outcome prediction.
@@ -253,7 +275,12 @@ RPSPrediction TfliteRPSClassifier::Predict(const std::vector<pixel>& image) {
   }
 
   // Read the model output as float probabilities.
-  prediction.probabilities = ReadOutput();
+  auto readOutput = ReadOutput();
+  prediction.probabilities = readOutput.probabilities;
+  prediction.winConfidence = readOutput.winPercent;
+
+  if (prediction.winConfidence > 0.5) prediction.win = true;
+  else prediction.win = false;
 
   // Find the outcome with the highest probability.
   const auto best = std::max_element(
@@ -262,11 +289,6 @@ RPSPrediction TfliteRPSClassifier::Predict(const std::vector<pixel>& image) {
 
   prediction.rps = static_cast<int>(std::distance(prediction.probabilities.begin(), best));
   prediction.confidence = *best;
-
-  // For now, we always set win to true. 
-  // In the future, this could be determined based on the model output or other logic.
-  // Don't think I can do that rn? Or am I stupid
-  prediction.win = true;
 
   return prediction;
 }

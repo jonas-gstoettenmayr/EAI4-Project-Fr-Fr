@@ -3,8 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
-
-typedef uint8_t pixel;
+#include "consts.h"
 
 struct BmpImage {
   int width = 0;

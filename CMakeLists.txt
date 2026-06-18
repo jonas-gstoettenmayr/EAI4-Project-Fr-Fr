@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 set(APP_NAME "mnist_sensehat_demo" CACHE STRING "Application target name")
 project(${APP_NAME} LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -18,6 +18,7 @@ add_subdirectory(
   "${CMAKE_CURRENT_BINARY_DIR}/tensorflow-lite"
   EXCLUDE_FROM_ALL
 )
+set_target_properties(tensorflow-lite PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:tensorflow-lite,INTERFACE_INCLUDE_DIRECTORIES>)
 
 find_package(Threads REQUIRED)
 

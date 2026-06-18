@@ -140,8 +140,9 @@ bool LoadRPSInput(const std::string& image_path,
     std::cerr << "Failed to load image: " << ex.what() << "\n";
     return false;
   }
-
-  PreprocessResult preprocess = PreprocessForRPS(image);
+  rpicam::RgbFrame frame;
+  ConvertBMPIImageToFrame(image, frame);
+  PreprocessResult preprocess = PreprocessForRPS(frame);
 
   if (!preprocess.success) {
     std::cerr << "Preprocessing failed: " << preprocess.error_message << "\n";
@@ -179,6 +180,8 @@ int RunRPSBenchmark(const ProgramOptions& options,
 
   for (int index = 0; index < options.benchmark_runs; ++index) {
     prediction = classifier->Predict(rps_input);
+    std::cout << "Prediction: " << ConvertPredToRPS(prediction.rps) << "\n";
+    std::cout << "Win: " << prediction.win << "\n" <<std::endl;
 
     if (!classifier->ok()) {
       std::cerr << "Inference failed: "
@@ -229,6 +232,9 @@ int RunCameraRPSInference(const ProgramOptions& options,
   try {
     while (true) {
       double mean = 0.0;
+      double mod_mean = 0.0;
+      double proc_mean = 0.0;
+
       // Get current image to framebuffer.
       display.StartCountDown(cCountDownLenght);
       
@@ -244,30 +250,36 @@ int RunCameraRPSInference(const ProgramOptions& options,
             frame = camera.currentFrame();
         }
 
+        auto proc_start = std::chrono::steady_clock::now();
         auto processed = PreprocessForRPS(*frame);
         if (!processed.success){
           std::cerr << "Error: " << processed.error_message << "\n";
           return 1;
         }
+        auto stop = std::chrono::steady_clock::now();
+        proc_mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-proc_start).count();
 
         // Run outcome prediction.
+        auto mod_start = std::chrono::steady_clock::now();
         preds[i] = classifier->Predict(processed.input);
-
         if (!classifier->ok()) {
           std::cerr << "Inference failed: "
                     << classifier->error_message() << "\n";
           return 1;
         }
+        stop = std::chrono::steady_clock::now();
+        mod_mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-mod_start).count();
 
-        std::cout << "Predicted gesture num: " << preds[i].rps << "\n";
         std::cout << "Predicted gesture: " << ConvertPredToRPS(preds[i].rps) << "\n";
         std::cout << "Confidence: " << preds[i].confidence << "\n";
 
-        auto stop = std::chrono::steady_clock::now();
+        stop = std::chrono::steady_clock::now();
         mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
         std::this_thread::sleep_until(next_tick);
       } // end for
       std::cout << "Mean Prediction/processing time: " << mean/cSampleAmount << std::endl;
+      std::cout << "Mean Prediction time: " << mod_mean/cSampleAmount << std::endl;
+      std::cout << "Mean Processing time: " << proc_mean/cSampleAmount << std::endl;
 
       // democracy calculations
       std::array<size_t, cModelOutputs> predCounts = {};
@@ -289,21 +301,19 @@ int RunCameraRPSInference(const ProgramOptions& options,
       if (options.show_on_sense_hat) {
         if (display.available()) {
 
-          RPS rps_pred = ConvertPredToRPS(most_frequent_idx);
-
-          if(rps_pred == RPS::reset){
-            display.ShowPrideFlag();
+          if(RPS const outcome = ConvertPredToRPS(most_frequent_idx); outcome == RPS::reset){
+            display.ShowRPS(outcome, AVGConf);
             std::this_thread::sleep_for(cShowGestureTime);
             break;
           }
           if(win > 0){
+            display.ShowRPS(ConvertPredToRPS((most_frequent_idx +2 ) % 3 ), AVGConf);
+            std::this_thread::sleep_for(cShowGestureTime);
+            display.ShowLoss();
+          } else {
             display.ShowRPS(ConvertPredToRPS((most_frequent_idx +1) % 3 ), AVGConf);
             std::this_thread::sleep_for(cShowGestureTime);
             display.ShowWin();
-          } else {
-            display.ShowRPS(rps_pred, AVGConf);
-            std::this_thread::sleep_for(cShowGestureTime);
-            display.ShowLoss();
           }
           std::this_thread::sleep_for(cShowResultTime);
 
@@ -352,3 +362,7 @@ int main(int argc, char** argv) {
 
   return 1;
 }
+
+// int main(int argc, char** argv) {
+
+// }

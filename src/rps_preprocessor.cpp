@@ -241,3 +241,9 @@ PreprocessResult PreprocessForRPS(const rpicam::RgbFrame& image)
 
     return result;
 }
+
+void ConvertBMPIImageToFrame(const BmpImage & image, rpicam::RgbFrame & frame){
+  frame.rgb = image.rgb;
+  frame.height = image.height;
+  frame.width = image.width;
+}

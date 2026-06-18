@@ -6,6 +6,8 @@
 
 using namespace std::literals::chrono_literals;
 
+// type of the image headers
+typedef uint8_t pixel;
 
 // input configs
 constexpr const char* cCapturePath = "/tmp/mnist_capture.bmp";
@@ -20,8 +22,8 @@ constexpr const char* cDefaultModel = "model.tflite";
 constexpr size_t cSampleAmount = 5;
 constexpr size_t cModelOutputs = 4;
 constexpr size_t cCountDownLenght = 3;
-constexpr size_t cModelInputWidth = 64;
-constexpr size_t cModelInputHeight = 64; // corrected Typo here
+constexpr size_t cModelInputWidth = 224;
+constexpr size_t cModelInputHeight = 224; // corrected Typo here
 constexpr size_t cModelInputChannels = 3;
 
 // camera settings
@@ -33,5 +35,5 @@ constexpr int cCaptureHeight = 512;
 constexpr bool cShowOnSenseHat = true;
 
 // perf settings
-constexpr int cDefaultWarmupRuns = 20;
-constexpr int cDefaultBenchmarkRuns = 1000;
+constexpr int cDefaultWarmupRuns = 1;
+constexpr int cDefaultBenchmarkRuns = 2;

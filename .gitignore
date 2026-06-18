@@ -6,6 +6,7 @@ third_party/
 *.Identifier
 __pycache__/
 *.pyc
+.env
 
 refs/
 test/

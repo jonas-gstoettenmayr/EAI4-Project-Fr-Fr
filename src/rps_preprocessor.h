@@ -16,3 +16,5 @@ struct PreprocessResult {
 // flat vector of input width * input height * input channels, type pixels
 // pixel is an alias for uint8_t which is an alias for unsigned char
 PreprocessResult PreprocessForRPS(const rpicam::RgbFrame & image);
+
+void ConvertBMPIImageToFrame(const BmpImage & image, rpicam::RgbFrame & frame);

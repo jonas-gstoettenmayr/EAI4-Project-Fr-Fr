@@ -1,6 +1,10 @@
 #include "rps_preprocessor.h"
 #include "consts.h"
 #include "bmp_image.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION 
+// needed to include the implementation of the stb header, 
+// it's a single header library so it works like this
+#include "stb_image_resize2.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,99 +19,7 @@
   #include <chrono>
 #endif
 
-namespace { // taken 1to1 from preprocess.cpp
-
-std::vector<float> GaussianBlur3x3(const std::vector<float>& input, int width, int height) {
-  std::vector<float> output(static_cast<std::size_t>(width * height), 0.0F);
-  const int kernel[3][3] = {
-      {1, 2, 1},
-      {2, 4, 2},
-      {1, 2, 1},
-  };
-
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
-      float sum = 0.0F;
-      int weight_sum = 0;
-      for (int ky = -1; ky <= 1; ++ky) {
-        for (int kx = -1; kx <= 1; ++kx) {
-          const int sample_x = std::clamp(x + kx, 0, width - 1);
-          const int sample_y = std::clamp(y + ky, 0, height - 1);
-          const int weight = kernel[ky + 1][kx + 1];
-          sum += input[static_cast<std::size_t>(sample_y * width + sample_x)] * static_cast<float>(weight);
-          weight_sum += weight;
-        }
-      }
-      output[static_cast<std::size_t>(y * width + x)] = sum / static_cast<float>(weight_sum);
-    }
-  }
-
-  return output;
-}
-
-
-std::vector<float> ResizeBilinear(const std::vector<float>& input, int input_width, int input_height, int output_width, int output_height) {
-  std::vector<float> output(static_cast<std::size_t>(output_width * output_height), 0.0F);
-
-  if (input_width <= 0 || input_height <= 0 || output_width <= 0 || output_height <= 0) {
-    return output;
-  }
-
-  const float scale_x = (output_width > 1) ? static_cast<float>(input_width - 1) / static_cast<float>(output_width - 1) : 0.0F;
-  const float scale_y = (output_height > 1) ? static_cast<float>(input_height - 1) / static_cast<float>(output_height - 1) : 0.0F;
-
-  for (int y = 0; y < output_height; ++y) {
-    const float src_y = scale_y * static_cast<float>(y);
-    const int y0 = static_cast<int>(std::floor(src_y));
-    const int y1 = std::min(y0 + 1, input_height - 1);
-    const float wy = src_y - static_cast<float>(y0);
-
-    for (int x = 0; x < output_width; ++x) {
-      const float src_x = scale_x * static_cast<float>(x);
-      const int x0 = static_cast<int>(std::floor(src_x));
-      const int x1 = std::min(x0 + 1, input_width - 1);
-      const float wx = src_x - static_cast<float>(x0);
-
-      const float top_left = input[static_cast<std::size_t>(y0 * input_width + x0)];
-      const float top_right = input[static_cast<std::size_t>(y0 * input_width + x1)];
-      const float bottom_left = input[static_cast<std::size_t>(y1 * input_width + x0)];
-      const float bottom_right = input[static_cast<std::size_t>(y1 * input_width + x1)];
-
-      const float top = top_left + wx * (top_right - top_left);
-      const float bottom = bottom_left + wx * (bottom_right - bottom_left);
-      output[static_cast<std::size_t>(y * output_width + x)] = top + wy * (bottom - top);
-    }
-  }
-
-  return output;
-}
-
-// Blur, resize, clamp, and interleave three float channels into uint8 RGB output.
-std::vector<pixel> ProcessChannels(std::vector<float> r, std::vector<float> g, std::vector<float> b, int src_width, int src_height){
-    // Apply Gaussian blur to each channel.
-    r = GaussianBlur3x3(r, src_width, src_height);
-    g = GaussianBlur3x3(g, src_width, src_height);
-    b = GaussianBlur3x3(b, src_width, src_height);
-
-    // Resize each channel to 28x28 using bilinear interpolation.
-    r = ResizeBilinear(r, src_width, src_height, cModelInputWidth, cModelInputHeight);
-    g = ResizeBilinear(g, src_width, src_height, cModelInputWidth, cModelInputHeight);
-    b = ResizeBilinear(b, src_width, src_height, cModelInputWidth, cModelInputHeight);
-
-    const std::size_t kPixelCount = static_cast<std::size_t>(cModelInputWidth) * static_cast<std::size_t>(cModelInputHeight);
-
-    // Clamp to [0,1], scale to [0,255], round, interleave as RGB.
-    std::vector<pixel> output(kPixelCount * cModelInputChannels, 0);
-
-    for (std::size_t i = 0; i < kPixelCount; ++i) {
-      // clamp directly in lround
-        output[i * 3U + 0U] = static_cast<pixel>(std::lround(std::clamp(r[i], 0.0F, 1.0F)));
-        output[i * 3U + 1U] = static_cast<pixel>(std::lround(std::clamp(g[i], 0.0F, 1.0F)));
-        output[i * 3U + 2U] = static_cast<pixel>(std::lround(std::clamp(b[i], 0.0F, 1.0F)));
-    }
-
-    return output;
-}
+namespace { 
 
 #ifdef DEBUG
 // -----------------------------
@@ -229,52 +141,42 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
       stop = std::chrono::steady_clock::now();
       std::cout << "Normalize Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
     #endif
-    
+
+     // sesize to model input 
     #ifdef TIME
       start = std::chrono::steady_clock::now();
     #endif
-    r = GaussianBlur3x3(r, crop_w, crop_h);
-    g = GaussianBlur3x3(g, crop_w, crop_h);
-    b = GaussianBlur3x3(b, crop_w, crop_h);
-    #ifdef TIME
+
+    std::vector<float> r_resized(cModelInputWidth * cModelInputHeight);
+    std::vector<float> g_resized(cModelInputWidth * cModelInputHeight);
+    std::vector<float> b_resized(cModelInputWidth * cModelInputHeight);
+
+    // using stb header for resizing, it's faster than the custom implementation
+    // doesn't need a gaussian blur either, since the stb header does it internally
+    // like the aliasing effect, so it's better to use it
+    stbir_resize_float_linear(r.data(), crop_w, crop_h, 0, r_resized.data(), cModelInputWidth, cModelInputHeight, 0, STBIR_1CHANNEL);
+    stbir_resize_float_linear(g.data(), crop_w, crop_h, 0, g_resized.data(), cModelInputWidth, cModelInputHeight, 0, STBIR_1CHANNEL);
+    stbir_resize_float_linear(b.data(), crop_w, crop_h, 0, b_resized.data(), cModelInputWidth, cModelInputHeight, 0, STBIR_1CHANNEL);
+        #ifdef TIME
       stop = std::chrono::steady_clock::now();
-      std::cout << "Gaussian Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
+      std::cout << "Resiize Bilinear with stb header Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
     #endif
 
     #ifdef DEBUG
         SaveDebugImage(
-            "debug_03_blur.bmp",
-            MergeRGB(r,g,b),
-            crop_w, crop_h);
-    #endif
-
-    // sesize to model input 
-    #ifdef TIME
-      start = std::chrono::steady_clock::now();
-    #endif
-    r = ResizeBilinear(r, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
-    g = ResizeBilinear(g, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
-    b = ResizeBilinear(b, crop_w, crop_h, cModelInputWidth, cModelInputHeight);
-    #ifdef TIME
-      stop = std::chrono::steady_clock::now();
-      std::cout << "Resiize Bilinear Took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count() <<" ms" << std::endl;
-    #endif
-
-    #ifdef DEBUG
-        SaveDebugImage(
-            "debug_04_resize.bmp",
-            MergeRGB(r,g,b),
+            "debug_03_resize.bmp",
+            MergeRGB(r_resized,g_resized,b_resized),
             cModelInputWidth,
             cModelInputHeight);
     #endif
 
     // here it goes back to uint8 and interleaved as RGB
-    result.input = MergeRGB(r,g,b);
+    result.input = MergeRGB(r_resized,g_resized,b_resized);
     result.success = true;
 
     #ifdef DEBUG
         SaveDebugImage(
-            "debug_05_final.bmp",
+            "debug_04_final.bmp",
             result.input,
             cModelInputWidth,
             cModelInputHeight);

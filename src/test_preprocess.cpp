@@ -6,6 +6,7 @@
 #include <string>
 #include <cstring>
 
+#include "stb_image_resize2.h"
 #include "bmp_image.h"
 #include "rps_preprocessor.h"
 #include "consts.h"
@@ -66,7 +67,7 @@ void SaveBmp24(const std::string& path, const std::vector<pixel>& rgb,
   }
 }
 
-int main2(int argc, char** argv) {
+int main(int argc, char** argv) {
   if (argc < 3) {
     std::cerr << "Usage: " << argv[0] << " input.bmp output.bmp\n";
     return 1;

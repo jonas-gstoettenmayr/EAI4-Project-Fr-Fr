@@ -31,49 +31,37 @@ files = []
 # Functions
 # _____________________________________________________________________________________________
 
-def gaussian_blur(channel):
+# def gaussian_blur(channel):
 
-    return convolve(channel, Kernel, mode = 'nearest')
+#     return convolve(channel, Kernel, mode = 'nearest')
 
 
-def resize_bilinear(channel, out_w, out_h):
+# def resize_bilinear(channel, out_w, out_h):
 
-    in_h, in_w = channel.shape
+#     in_h, in_w = channel.shape
 
-    # Build output coordinate grids
-    xs = np.linspace(0, in_w - 1, out_w)
-    ys = np.linspace(0, in_h - 1, out_h)
-    grid_x, grid_y = np.meshgrid(xs, ys)
+#     # Build output coordinate grids
+#     xs = np.linspace(0, in_w - 1, out_w)
+#     ys = np.linspace(0, in_h - 1, out_h)
+#     grid_x, grid_y = np.meshgrid(xs, ys)
 
-    x0 = np.floor(grid_x).astype(int)
-    y0 = np.floor(grid_y).astype(int)
-    x1 = np.clip(x0 + 1, 0, in_w - 1)
-    y1 = np.clip(y0 + 1, 0, in_h - 1)
-    wx = grid_x - x0
-    wy = grid_y - y0
+#     x0 = np.floor(grid_x).astype(int)
+#     y0 = np.floor(grid_y).astype(int)
+#     x1 = np.clip(x0 + 1, 0, in_w - 1)
+#     y1 = np.clip(y0 + 1, 0, in_h - 1)
+#     wx = grid_x - x0
+#     wy = grid_y - y0
 
-    top = channel[y0, x0] + wx * (channel[y0, x1] - channel[y0, x0])
-    bottom = channel[y1, x0] + wx * (channel[y1, x1] - channel[y1, x0])
-    return top + wy * (bottom - top)
+#     top = channel[y0, x0] + wx * (channel[y0, x1] - channel[y0, x0])
+#     bottom = channel[y1, x0] + wx * (channel[y1, x1] - channel[y1, x0])
+#     return top + wy * (bottom - top)
 
 
 def preprocess_image(path):
-
     img = Image.open(path).convert("RGB")
-    arr = np.array(img, dtype=np.float32) / 255.0
+    img = img.resize((Width, Height), Image.LANCZOS) # the stuff from stb_image_resize2.h
 
-    result = np.zeros((Height, Width, 3), dtype=np.float32)
-
-    for c in range(3):
-        blurred = gaussian_blur(arr[:, :, c])
-        resized = resize_bilinear(blurred, Width, Height)
-        result[:, :, c] = np.clip(resized, 0.0, 1.0)
-
-    arr_uint8 = (result * 255.0).clip(0, 255).astype(np.uint8)
-    processed_img = Image.fromarray(arr_uint8, mode = "RGB")
-
-    return processed_img
-
+    return img
 
 def list_files_recursive(path = '.'):
 

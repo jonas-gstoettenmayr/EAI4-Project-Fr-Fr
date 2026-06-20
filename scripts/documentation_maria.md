@@ -26,7 +26,7 @@ The make Dataset uses the two functions above and creates a dataset out of all t
 
 ## Modeling
 
-The Model gave me a lot of issues. It has a Mobilenet backbone and the trainable parameter gave me some issues as in the beginning it showed me that it was doing good but as soon as you call the model again it was doing bad. Right now it is using a trainable backbone which is not defined with backbone.trainable=True which works. Another issue was figuring out what image it actually expects as I got conflicting information about that -> it actually expects with include_preprocessing [0,255] and without [-1,1]. Now it works.
+The Model gave me a lot of issues. It has a Mobilenet backbone and the trainable parameter gave me some issues as in the beginning it showed me that it was doing good but as soon as you call the model again it was doing bad. Right now it is using a trainable backbone which is not defined with backbone.trainable=True which works. Another issue was figuring out what image it actually expects as I got conflicting information about that -> it actually expects with include_preprocessing [0,255] and without [-1,1]. Optimizations where tried with setting alpha to 0.75 (the only other value besides 1.0 to keep the imagenet weights) and setting minimalistic=True (which we used in the final model). Now it works.
 Definition in the function:
 
     Shared MobileNetV3Small backbone with two independent classification heads.
@@ -35,6 +35,16 @@ Definition in the function:
     Both heads are trained jointly.
 
 Both heads count the same (1 and 1) for the loss metric. One has a multiclass output and the other a binary with sigmoid. 
+
+
+As a short summary:
+
+The model takes RGB images of shape 160×160×3 with pixel values in the range [0, 255]. The built-in MobileNetV3 preprocessing layer scales the inputs to [-1, 1] before passing them through a MobileNetV3Small Minimalistic backbone. The backbone produces a shared feature representation, which is then fed into two independent classification heads:
+
+- Head 1: predicts probabilities for the 4-class classification task using a softmax output layer.
+- Head 2: predicts the probability of the binary classification task using a sigmoid output layer.
+
+Both heads share the same backbone and are trained together in a multi-task learning setup.
 
 ## Evaluation
 
@@ -67,12 +77,33 @@ In the end we save the multihead model thats in the normal stand as model.tflite
 
 The mobilenet made it complicated for us, mobilenet itself is very good already but it also makes it harder for us to prune anything and would have exploded the scope if I tried to make all of them functions work (the functions we made in the exercise would not work with it). Same for the students I tried some out but they were all bad, the only feasable thing would have been using a mobilenet with a smaller alpha and trying to knowledge distill to it and we decided against that as it worked good. 
 
+# The Optimizations
+
+Optimizations where still tried to make the model smaller, for example is our multiclass head incredibly small -> only having 64 -> dropout(0.3) -> 16 -> 4 output neuron on one head and on the other 2 -> 1 sigmoid. Right now we still have the 224 size as this is the standard size for mobilenetv3 and yielded the best results
+
+Some optimizations have also failed -> making the images very small (64 or 128) was not enough even with a lot of epochs -> the best results where arround 66% for Gestures and 85% for the Acessory.
+
+Mobilenet has though also support for setting the image size to 160, 160. This setting worked really good, giving us a bit less accuracy but still wonderful results.
+
+Other Optimizations where tried on the Alpha of the Mobilenet itself -> making the alpha (changing alpha changes the channels to the % you choose) smaller (up to 0.5). The only feasible options where 1.0 and 0.75 though as those allow us to keep the weight = "imagenet" setting making it good for use. 
+
+The last Optimization was setting minimalistic to True meaning it is a stripped down version variant of the standard MobilenetV3, getting rid of the complex architectural additions, but keeping the base layer dimension and inverted residual structure. This does: 
+- No Squeeze-and-Excitation (SE) modules: Drops the lightweight channel-wise attention mechanism.
+- No Hard-Swish activations: Replaces the computationally expensive h-swish non-linearities with standard, easily computed functions (like ReLU).
+- No 5×5 convolutions: Simplifies spatial operations by using standard 3×3 kernel sizes
+
+Making it easier to deploy on Hardware (also the pi) and makes it quite lightweight from the size. THis though requires Alpha=1.0 if you want to use the weights = "imagenet".
+
 
 # Model_metrics.csv:
 
-| tflite_file           | method               | tflite_mode | validation_accuracy_g | test_accuracy_g | validation_accuracy_c | test_accuracy_c | tflite_test_accuracy_g | tflite_test_accuracy_c | tflite_file_size_kilobytes | parameters_total |
-| --------------------- | -------------------- | ----------- | --------------------: | --------------: | --------------------: | --------------: | ---------------------: | ---------------------: | -------------------------: | ---------------: |
-| multihead.tflite      | normal FP32 training | fp32        |                 0.939 |           1.000 |                 0.960 |           0.970 |                  1.000 |                  0.970 |                       3795 |            39193 |
-| multihead-int8.tflite | now in int8          | int8        |                 0.939 |           1.000 |                 0.960 |           0.970 |                  0.697 |                  0.879 |                       1225 |            39193 |
-
-
+| tflite_file                    | method               | tflite_mode | validation_accuracy_g | test_accuracy_g | validation_accuracy_c | test_accuracy_c | tflite_test_accuracy_g | tflite_test_accuracy_c | tflite_file_size_kilobytes | parameters_total |
+|--------------------------------|----------------------|-------------|-----------------------|-----------------|-----------------------|-----------------|------------------------|------------------------|----------------------------|------------------|
+| multihead.tflite               | normal FP32 training | fp32        | 0.939                 | 1.000           | 0.960                 | 0.970           | 1.000                  | 0.970                  | 3795                       | 39193            |
+| multihead-int8.tflite          | now in int8          | int8        | 0.939                 | 1.000           | 0.960                 | 0.970           | 0.697                  | 0.879                  | 1225                       | 39193            |
+| multihead_75.tflite            | normal FP32 training | fp32        | 0.939                 | 0.939           | 0.990                 | 0.970           | 0.939                  | 0.970                  | 2382                       | 29689            |
+| multihead_75-int8.tflite       | now in int8          | int8        | 0.939                 | 0.939           | 0.990                 | 0.970           | 0.576                  | 0.970                  | 824                        | 29689            |
+| multihead-mini.tflite          | normal FP32 training | fp32        | 0.909                 | 1.000           | 0.970                 | 1.000           | 1.000                  | 1.000                  | 1828                       | 39193            |
+| multihead-mini-int8.tflite     | now in int8          | int8        | 0.909                 | 1.000           | 0.970                 | 1.000           | 0.667                  | 0.970                  | 638                        | 39193            |
+| multihead-mini_160.tflite      | normal FP32 training | fp32        | 0.899                 | 0.909           | 0.960                 | 0.939           | 0.909                  | 0.939                  | 1828                       | 39193            |
+| multihead-mini_160-int8.tflite | now in int8          | int8        | 0.899                 | 0.909           | 0.960                 | 0.939           | 0.758                  | 0.970                  | 638                        | 39193            |

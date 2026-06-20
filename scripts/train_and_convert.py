@@ -38,13 +38,13 @@ def parse_args() -> argparse.Namespace:
         description="Train MNIST baseline/compression variants, one student KD model, one K-Means example, and one final INT8 student."
     )
     parser.add_argument("--artifacts-dir", default="artifacts")
-    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--epochs", type=int, default=600)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--validation-split", type=float, default=0.20)
     parser.add_argument("--test-split", type=float, default=0.25)
     parser.add_argument("--representative-samples", type=int, default=256)
     parser.add_argument("--tflite-eval-samples", type=int, default=0)
-    parser.add_argument("--early-stopping-patience", type=int, default=20)
+    parser.add_argument("--early-stopping-patience", type=int, default=100)
     parser.add_argument("--lr-reduce-patience", type=int, default=4)
     parser.add_argument("--lr-reduce-factor", type=float, default=0.5)
     parser.add_argument("--min-lr", type=float, default=1e-7)
@@ -137,7 +137,7 @@ def save_confusion_matrices(model, dataset, artifacts_dir):
     ).plot(ax=ax)
 
     fig.savefig(
-        artifacts_dir / "gesture_confusion_matrix.png",
+        artifacts_dir / "gesture_confusion_matrix_mini_160.png",
         dpi=300
     )
     plt.close(fig)
@@ -155,7 +155,7 @@ def save_confusion_matrices(model, dataset, artifacts_dir):
     ).plot(ax=ax)
 
     fig.savefig(
-        artifacts_dir / "condition_confusion_matrix.png",
+        artifacts_dir / "condition_confusion_matrix_mini_160.png",
         dpi=300
     )
     plt.close(fig)
@@ -166,7 +166,7 @@ def save_confusion_matrices(model, dataset, artifacts_dir):
 def split_train_validation(x: np.ndarray, y: np.ndarray, validation_split: float):
     return train_test_split(x, y, test_size=validation_split, shuffle=True, random_state=42)
 
-def load_and_preprocess(path, label_gesture, label_condition, size = 224):
+def load_and_preprocess(path, label_gesture, label_condition, size = 160):
     """Loads one image from disk"""
     raw   = tf.io.read_file(path)
     image = tf.image.decode_bmp(raw, channels=3)
@@ -195,7 +195,7 @@ def make_dataset(paths, yg, yc, batch_size, shuffle=False, use_augment = False):
 # Modeling
 
 
-def make_model_mobilenet_multihead(img_size: int, num_classes1: int) -> tf.keras.Model:
+def make_model_mobilenet_multihead(img_size: int, num_classes1: int, alpha: int = 1.0) -> tf.keras.Model:
     """
     Shared MobileNetV3Small backbone with two independent classification heads.
     Head 1 (primary): Dense(64) -> Dropout -> Dense(16) -> Dense(num_classes1)
@@ -205,8 +205,10 @@ def make_model_mobilenet_multihead(img_size: int, num_classes1: int) -> tf.keras
     backbone = tf.keras.applications.MobileNetV3Small(
         input_shape=(img_size, img_size, 3),
         include_top=False,
-        weights="imagenet",
+        weights= "imagenet",
         pooling="avg",
+        alpha=alpha, #0.75 and 1.0 (being the default) work here normally with the weights set to imagenet, if you want another alpha need to set imagenet weight to None but it becomes a bit bad
+        minimalistic=True, #only works on alpha=1.0 otherwise need to set the weights to None and that makes the model worse again
         include_preprocessing=True, 
     )
     inputs = tf.keras.Input(shape=(img_size, img_size, 3), name="image")
@@ -355,7 +357,7 @@ def paths_to_numpy(paths: np.ndarray, limit: int = 0) -> np.ndarray:
     for p in subset:
         img = tf.image.decode_bmp(tf.io.read_file(p), channels=3)
         img = tf.cast(img, tf.uint8) #/ 255.0
-        img = tf.image.resize(img, [224, 224])
+        img = tf.image.resize(img, [160, 160])
         images.append(img.numpy())
     return np.stack(images, axis=0)
 
@@ -375,7 +377,7 @@ def main() -> int:
     artifacts_dir = Path(args.artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    root = os.path.join("Data_collection", sys.argv[1] if len(sys.argv) > 1 else "processed")
+    root = os.path.join("Data_collection", "processed") 
     paths, yc, yg = load_multiclasses_paths(root)
 
     paths_train, paths_val_temp, yc_train, yc_val = split_train_validation(paths, yc, args.validation_split)
@@ -392,7 +394,7 @@ def main() -> int:
 
 
     # multihead 
-    multihead = make_model_mobilenet_multihead(224, num_classes1=4)
+    multihead = make_model_mobilenet_multihead(160, num_classes1=4, alpha=1.0)
     history = multihead.fit(
     train_ds,
     batch_size=args.batch_size,
@@ -417,11 +419,11 @@ def main() -> int:
     ]
     )
     multihead.trainable = False
-    save_training_history(history, artifacts_dir / "training_history.png")
+    save_training_history(history, artifacts_dir / "training_history_mini_160.png")
     models: list[dict[str, Any]] = []
 
-    append_model(models, "multihead", "normal FP32 training", multihead)
-    append_model(models, "multihead-int8", "now in int8", multihead, "int8")
+    append_model(models, "multihead-mini_160", "normal FP32 training", multihead)
+    append_model(models, "multihead-mini_160-int8", "now in int8", multihead, "int8")
     
 
     rows: list[dict[str, Any]] = []
@@ -465,8 +467,8 @@ def main() -> int:
         })
         print(f"Exported {tflite_path} keras_acc={(test_accc*0.5)+(test_accg*0.5):.4f} tflite_acc={(tflite_accc*0.5)+(tflite_accg*0.5):.4f}")
 
-    shutil.copy2(artifacts_dir / "multihead.tflite", artifacts_dir / "model.tflite")
-    metrics_path = artifacts_dir / "model_metrics.csv"
+    shutil.copy2(artifacts_dir / "multihead-mini.tflite", artifacts_dir / "model.tflite")
+    metrics_path = artifacts_dir / "model_metrics_mini_160.csv"
     with metrics_path.open("w", newline="", encoding="utf-8") as output:
         writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
         writer.writeheader()

@@ -1,17 +1,16 @@
 # _____________________________________________________________________________________________
 # Imports
 # _____________________________________________________________________________________________
-import numpy as np
+# import numpy as np
 from PIL import Image
-from scipy.ndimage import convolve
+# from scipy.ndimage import convolve
 import shutil
 import os
-
+from pathlib import Path
 
 # _____________________________________________________________________________________________
 # Variables
 # _____________________________________________________________________________________________
-
 Width = 224
 Height = 224
 
@@ -21,8 +20,9 @@ Height = 224
 #     [1, 2, 1],
 # ], dtype=np.float32) / 16.0
 
-source = "data"
-destination = "processed"
+DATA_COLLECTION_DIR = Path(__file__).parent
+source = DATA_COLLECTION_DIR / "data"
+destination = DATA_COLLECTION_DIR /"processed"
 
 files = []
 
@@ -63,26 +63,27 @@ def preprocess_image(path):
 
     return img
 
-def list_files_recursive(path = '.'):
+# def list_files_recursive(path: Path = DATA_COLLECTION_DIR):
 
-    for entry in os.listdir(path):
-        full_path = os.path.join(path, entry)
+#     for entry in path.iterdir():
+#         full_path = os.path.join(path, entry)
 
-        if os.path.isdir(full_path):
-            list_files_recursive(full_path)
+#         if os.path.isdir(full_path):
+#             list_files_recursive(full_path)
 
-        else:
-            files.append(full_path)
+#         else:
+#             files.append(full_path)
     
-    return files
+#     return files
 
 
 def make_get_files():
 
-    shutil.copytree(source, destination)
+    shutil.copytree(source, destination, dirs_exist_ok=True)
 
-    files = list_files_recursive(destination)
-
+    # files = list_files_recursive(destination)
+    files = destination.rglob("*.bmp")
+    
     return files
 
 
@@ -92,7 +93,7 @@ def main():
     files = make_get_files()
 
     for image_path in files:
-
+        print(image_path)
         new_img = preprocess_image(image_path)
 
         new_img.save(image_path)

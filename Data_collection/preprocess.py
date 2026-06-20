@@ -15,11 +15,11 @@ import os
 Width = 224
 Height = 224
 
-Kernel = np.array([
-    [1, 2, 1],
-    [2, 4, 2],
-    [1, 2, 1],
-], dtype=np.float32) / 16.0
+# Kernel = np.array([
+#     [1, 2, 1],
+#     [2, 4, 2],
+#     [1, 2, 1],
+# ], dtype=np.float32) / 16.0
 
 source = "data"
 destination = "processed"
@@ -59,7 +59,7 @@ files = []
 
 def preprocess_image(path):
     img = Image.open(path).convert("RGB")
-    img = img.resize((Width, Height), Image.LANCZOS) # the stuff from stb_image_resize2.h
+    img = img.resize((Width, Height), Image.Resampling.LANCZOS) # the stuff from stb_image_resize2.h
 
     return img
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=Starts the gesture recogniser service
+After=sensehat-host-ip.service sensehat-clear.service
+#Requires=sensehat-host-ip.service
+Wants=sensehat-host-ip.service
+
+[Service]
+Type=simple
+Restart=on-failure
+User=kit-21
+ExecStart=bash
+WorkingDirectory=~/EAIProject/rps_fr_f
+StandardOutput=journal
+StandardError=journal
+ExecStopPost=/usr/bin/systemctl start sensehat-clear.service
+
+[Install]
+WantedBy=multi-user.target

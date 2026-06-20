@@ -30,6 +30,9 @@ ARTIFACT_FILES=("${ARTIFACT_DIR}"/*.tflite)
 if [[ -f "${ARTIFACT_DIR}/test_digit.bmp" ]]; then
   ARTIFACT_FILES+=("${ARTIFACT_DIR}/test_digit.bmp")
 fi
+if [[ -f "scripts/rps_fr_rf.service" ]]; then
+  ARTIFACT_FILES+=("scripts/rps_fr_rf.service")
+fi
 shopt -u nullglob
 
 if (( ${#ARTIFACT_FILES[@]} == 0 )); then

@@ -6,7 +6,7 @@
 
 // uncomment to enable debbuing
 // #define DEBUG
-#define TIME
+// #define TIME
 
 using namespace std::literals::chrono_literals;
 
@@ -32,10 +32,12 @@ constexpr size_t cModelInputChannels = 3;
 
 // camera settings
 constexpr std::chrono::milliseconds cCaptureTimeoutMs = 2500ms;
-constexpr size_t cFPS = 5;
+constexpr size_t cFPS = 15;
 constexpr auto cWaitTime = std::chrono::milliseconds(1000/cFPS);
-constexpr int cCaptureWidth = 512;
+constexpr int cCaptureWidth = 682;
 constexpr int cCaptureHeight = 512;
+constexpr int cCropWidth = 512;
+constexpr int cCropHeight = 512;
 constexpr bool cShowOnSenseHat = true;
 
 // perf settings

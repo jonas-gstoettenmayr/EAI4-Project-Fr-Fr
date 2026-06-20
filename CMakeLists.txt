@@ -13,6 +13,20 @@ if(NOT EXISTS "${TFLITE_SRC_DIR}/tensorflow/lite/interpreter.h")
   message(FATAL_ERROR "TensorFlow Lite source tree not found: ${TFLITE_SRC_DIR}. Run `make tflite` to fetch the source tree.")
 endif()
 
+# TFLite optimisations
+
+# enables hand crafetd ARM NEON instructions
+set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "Enable XNNPACK acceleration" FORCE)
+set(TFLITE_ENABLE_RUY ON CACHE BOOL "Enable RUY matrix multiplication" FORCE)
+
+# 2. Add global preprocessor definitions for hardware optimization
+add_compile_definitions(
+    # Informs TFLite's codebase that ARM NEON instructions are present
+    __ARM_NEON=1
+    # Avoids fallback paths checking for x86 SSE instructions 
+    TF_LITE_DISABLE_X86_NEON=ON
+)
+
 add_subdirectory(
   "${TFLITE_SRC_DIR}/tensorflow/lite"
   "${CMAKE_CURRENT_BINARY_DIR}/tensorflow-lite"

@@ -53,13 +53,18 @@ $(TFLITE_READY): scripts/ensure_tflite_source.sh .env
 
 tflite: $(TFLITE_READY)
 
+# using release mode is much better, obviously
+# set exact CPU flags for even better optimisations
 $(APP_BINARY): CMakeLists.txt toolchains/aarch64.cmake $(CPP_SOURCES) $(TFLITE_READY) | $(BUILD_DIR_STAMP)
 	cmake -S . -B "$(BUILD_DIR)" -G Ninja \
 	  -DCMAKE_TOOLCHAIN_FILE="$(abspath toolchains/aarch64.cmake)" \
-	  -DCMAKE_BUILD_TYPE=Debug \
+	  -DCMAKE_BUILD_TYPE=Release \
+	  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
 	  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 	  -DAPP_NAME="$(APP_NAME)" \
-	  -DTFLITE_SRC_DIR="$(abspath $(TFLITE_SRC_DIR))"
+	  -DTFLITE_SRC_DIR="$(abspath $(TFLITE_SRC_DIR))" \
+	  -DCMAKE_CXX_FLAGS="-march=armv8-a -mcpu=cortex-a53 -O3" \
+	  -DCMAKE_C_FLAGS="-march=armv8-a -mcpu=cortex-a53 -O3"
 	cmake --build "$(BUILD_DIR)" --parallel "$(BUILD_JOBS)" --target "$(APP_NAME)"
 
 build: $(APP_BINARY)

@@ -231,6 +231,8 @@ int RunCameraRPSInference(const ProgramOptions& options,
   std::this_thread::sleep_for(std::chrono::milliseconds(cCaptureTimeoutMs));
   std::cout << "Starting Loop" << std::endl;
   try {
+    PreprocessResult processed;
+    processed.input.resize(cModelInputHeight * cModelInputWidth * cModelInputChannels);
     while (true) {
       double mean = 0.0;
       double mod_mean = 0.0;
@@ -241,7 +243,6 @@ int RunCameraRPSInference(const ProgramOptions& options,
       
       std::array<RPSPrediction, cSampleAmount> preds;
       auto next_tick = std::chrono::steady_clock::now(); // current time
-      PreprocessResult processed;
       for(size_t i = 0; i < cSampleAmount; i++) {
         next_tick += cWaitTime;
         auto start = std::chrono::steady_clock::now();
@@ -251,6 +252,7 @@ int RunCameraRPSInference(const ProgramOptions& options,
           std::this_thread::sleep_for(std::chrono::microseconds(100));
           frame = camera.currentFrame();
         }
+        std::cout << "\n" << "Active width: " << frame->active_width << " | active height: " << frame-> active_height  << "\n\n";
         auto proc_start = std::chrono::steady_clock::now();
         PreprocessForRPS(* frame, processed);
         if (!processed.success){
@@ -272,7 +274,8 @@ int RunCameraRPSInference(const ProgramOptions& options,
         mod_mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-mod_start).count();
 
         std::cout << "Predicted gesture: " << ConvertPredToRPS(preds[i].rps) << "\n";
-        std::cout << "Confidence: " << preds[i].confidence << "\n\n";
+        std::cout << "G Confidence: " << preds[i].confidence << "\n\n";
+        std::cout << "W Confidence: " << preds[i].winConfidence << "\n\n";
 
         stop = std::chrono::steady_clock::now();
         mean += std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
@@ -307,8 +310,8 @@ int RunCameraRPSInference(const ProgramOptions& options,
             std::this_thread::sleep_for(cShowGestureTime);
             break;
           }
-          if(win > 0){
-            display.ShowRPS(ConvertPredToRPS((most_frequent_idx +2 ) % 3 ), AVGConf);
+          if(win > 0){ // pi should loose as the accessory is there
+            display.ShowRPS(ConvertPredToRPS((most_frequent_idx + 2 ) % 3 ), AVGConf);
             std::this_thread::sleep_for(cShowGestureTime);
             display.ShowLoss();
           } else {

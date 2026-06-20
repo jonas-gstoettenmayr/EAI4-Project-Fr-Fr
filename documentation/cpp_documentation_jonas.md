@@ -56,3 +56,12 @@ Which would allow for a stable 30 FPS (The camera does not allow it though, and 
 ## The service
 
 I also designed the service, it waits until after the IP address is displayed before starting the gesture classifier on its own, it can be ended by it detecting the `gay` gesture.
+
+## Issues and pitfalls
+
+* Matching the processed data we used to train to the live data and its processing as well as the model. (Sizes, aspect ratios, uint8 vs float...)
+* Matching the required speed with normal code (see above optimizations)
+* BMP BGR vs RGB frames, and if that was an effect on the model
+* Figuring out why the model fails durring inference in the earlier stages (Is it the model, the data, the code?)
+* Replicating training conditions durring live inference testing
+* Slow compilation times after using otpimzed compilation setup

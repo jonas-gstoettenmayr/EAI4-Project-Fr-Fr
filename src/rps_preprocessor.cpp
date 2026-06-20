@@ -141,7 +141,7 @@ void PreprocessForRPS(const rpicam::RgbFrame & image, PreprocessResult & result)
         cropped.data(),  cCropWidth,  cCropHeight,  0, // 0 stride means tightly packed
         result.input.data(), cModelInputWidth, cModelInputHeight, 0, // 0 stride means tightly packed
         STBIR_RGB                                    // 3 channels: Red, Green, Blue
-    );
+    );    
 
     #ifdef TIME
       stop = std::chrono::steady_clock::now();
@@ -171,4 +171,6 @@ void ConvertBMPIImageToFrame(const BmpImage & image, rpicam::RgbFrame & frame){
   frame.rgb = image.rgb;
   frame.height = image.height;
   frame.width = image.width;
+  frame.active_height = image.height;
+  frame.active_width = image.width;
 }

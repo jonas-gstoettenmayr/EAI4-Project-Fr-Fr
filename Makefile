@@ -69,7 +69,7 @@ $(APP_BINARY): CMakeLists.txt toolchains/aarch64.cmake $(CPP_SOURCES) $(TFLITE_R
 
 build: $(APP_BINARY)
 
-deploy: $(APP_BINARY) #$(MODEL_FILE)
+deploy: $(APP_BINARY) $(MODEL_FILE)
 	bash scripts/deploy_to_pi.sh
 
 run: $(APP_BINARY) $(MODEL_FILE)

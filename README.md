@@ -1,16 +1,19 @@
 # EAI4-Project-Fr-Fr
 The EAI4 Project of the Fr-Fr group
 
-To start:
+## Project setup
+
+To build project:
 * Git pull the project
 * open the folder in VS code with container extension enabled
 * bottom right click open in dev container
-* done - I hope?
+* put pi ip into the env
+* make deploy
+* Done!
 
-## Naming convention
-
-Use RPS (for ROCK paper Scissors) for the files which have to do with rps (i.e. instead of digit for the exercise project).
-
+With this the application is installed on the pi - inside the directory `EAIProject`! \
+To start it simply execute the applicaiton `rps_fr_fr`. \
+Or execute `sudo systemctl enable ./rps_fr_fr.service` and `sudo systemctl start rps_fr_fr.service`
 
 ## Dev Container Setup
 

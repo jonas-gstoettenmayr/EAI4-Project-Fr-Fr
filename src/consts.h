@@ -26,13 +26,13 @@ constexpr const char* cDefaultModel = "model.tflite";
 constexpr size_t cSampleAmount = 5;
 constexpr size_t cModelOutputs = 4;
 constexpr size_t cCountDownLenght = 3;
-constexpr size_t cModelInputWidth = 224;
-constexpr size_t cModelInputHeight = 224; // corrected Typo here
+constexpr size_t cModelInputWidth = 160;
+constexpr size_t cModelInputHeight = 160;
 constexpr size_t cModelInputChannels = 3;
 
 // camera settings
 constexpr std::chrono::milliseconds cCaptureTimeoutMs = 2500ms;
-constexpr size_t cFPS = 15;
+constexpr size_t cFPS = 20;
 constexpr auto cWaitTime = std::chrono::milliseconds(1000/cFPS);
 constexpr int cCaptureWidth = 682;
 constexpr int cCaptureHeight = 512;
@@ -41,5 +41,5 @@ constexpr int cCropHeight = 512;
 constexpr bool cShowOnSenseHat = true;
 
 // perf settings
-constexpr int cDefaultWarmupRuns = 1;
-constexpr int cDefaultBenchmarkRuns = 2;
+constexpr int cDefaultWarmupRuns = 10;
+constexpr int cDefaultBenchmarkRuns = 200;

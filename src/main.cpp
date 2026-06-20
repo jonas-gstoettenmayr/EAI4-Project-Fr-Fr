@@ -143,6 +143,7 @@ bool LoadRPSInput(const std::string& image_path,
   rpicam::RgbFrame frame;
   ConvertBMPIImageToFrame(image, frame);
   PreprocessResult preprocess;
+  preprocess.input.resize(cModelInputHeight * cModelInputWidth * cModelInputChannels);
   PreprocessForRPS(frame, preprocess);
 
   if (!preprocess.success) {
@@ -157,7 +158,7 @@ bool LoadRPSInput(const std::string& image_path,
 // Benchmarks one digit model.
 int RunRPSBenchmark(const ProgramOptions& options,
                       TfliteRPSClassifier* classifier) {
-  std::vector<uint8_t> rps_input;
+  std::vector<uint8_t> rps_input(cModelInputHeight * cModelInputWidth * cModelInputChannels);
 
   if (!LoadRPSInput(options.test_image_path, &rps_input)) {
     return 1;
@@ -181,8 +182,8 @@ int RunRPSBenchmark(const ProgramOptions& options,
 
   for (int index = 0; index < options.benchmark_runs; ++index) {
     prediction = classifier->Predict(rps_input);
-    std::cout << "Prediction: " << ConvertPredToRPS(prediction.rps) << "\n";
-    std::cout << "Win: " << prediction.win << "\n" <<std::endl;
+    // std::cout << "Prediction: " << ConvertPredToRPS(prediction.rps) << "\n";
+    // std::cout << "Win: " << prediction.win << "\n" <<std::endl;
 
     if (!classifier->ok()) {
       std::cerr << "Inference failed: "
@@ -204,7 +205,9 @@ int RunRPSBenchmark(const ProgramOptions& options,
   std::cout << "Warmup runs: " << options.warmup_runs << "\n";
   std::cout << "Runs: " << options.benchmark_runs << "\n";
   std::cout << "Predicted gesture: " << prediction.rps << "\n";
-  std::cout << "Confidence: " << prediction.confidence << "\n";
+  std::cout << "Gesture Confidence: " << prediction.confidence << "\n";
+  std::cout << "Predicted win: " << prediction.win << "\n";
+  std::cout << "Win Confidence: " << prediction.winConfidence << "\n";
   std::cout << "Total inference ms: " << total_ms << "\n";
   std::cout << "Average inference ms: " << average_ms << "\n";
 

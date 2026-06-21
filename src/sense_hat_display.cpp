@@ -1,5 +1,4 @@
 #include "sense_hat_display.h"
-#include "consts.h"
 
 #include <fcntl.h>
 #include <linux/fb.h>
@@ -15,174 +14,34 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <chrono>
 #include <thread>
-#include <iostream>
+#include "signs_to_show.h"
 
-using namespace std;
-using namespace chrono_literals;
-using namespace this_thread;
+namespace {
 
-constexpr uint16_t r[8][8] =
-    {
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xbdf7, 0xbdf7, 0xbdf7, 0xbdf7, 0xbdf7, 0x0000},
-        {0x0000, 0x0000, 0x8410, 0xbdf7, 0xbdf7, 0xbdf7, 0x8410, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xbdf7, 0xbdf7, 0x8410, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}};
+constexpr std::uint8_t kDigitPatterns[10][8] = {
+    {0b00000000, 0b00111100, 0b01100110, 0b01100110, 0b01101110, 0b01110110, 0b01100110, 0b00111100},
+    {0b00000000, 0b00111100, 0b00011000, 0b00011000, 0b00011000, 0b00011000, 0b00011100, 0b00011000},
+    {0b00000000, 0b01111110, 0b00000110, 0b00001100, 0b00110000, 0b01100000, 0b01100110, 0b00111100},
+    {0b00000000, 0b00111100, 0b01100110, 0b01100000, 0b00111000, 0b01100000, 0b01100110, 0b00111100},
+    {0b00000000, 0b01111000, 0b00110000, 0b01111110, 0b00110010, 0b00110100, 0b00011000, 0b00110000},
+    {0b00000000, 0b00111100, 0b01100110, 0b01100000, 0b01100000, 0b00111110, 0b00000110, 0b01111110},
+    {0b00000000, 0b00111100, 0b01100110, 0b01100110, 0b01100110, 0b00111110, 0b00000110, 0b00111100},
+    {0b00000000, 0b00011000, 0b00011000, 0b00011000, 0b00110000, 0b01100000, 0b01100110, 0b01111110},
+    {0b00000000, 0b00111100, 0b01100110, 0b01100110, 0b00111100, 0b01100110, 0b01100110, 0b00111100},
+    {0b00000000, 0b00011100, 0b00110000, 0b01100000, 0b01111100, 0b01100110, 0b01100110, 0b00111100},
+};
 
-constexpr uint16_t p[8][8] =
-    {
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x8410, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x8410, 0x8410, 0xffff, 0x8410, 0x0000},
-        {0x0000, 0x0000, 0x8410, 0xffff, 0xffff, 0xffff, 0xffff, 0x8410},
-        {0x0000, 0x8410, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0x8410},
-        {0x8410, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xbdf7, 0x0000},
-        {0x0000, 0xbdf7, 0xffff, 0xffff, 0xbdf7, 0xbdf7, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xbdf7, 0xbdf7, 0x0000, 0x0000, 0x0000, 0x0000}};
-
-constexpr uint16_t s[8][8] =
-    {
-        {0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab},
-        {0x0000, 0x0000, 0x0000, 0xbdf7, 0x0000, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xbdf7, 0x0000, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0x0000, 0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab},
-        {0x0000, 0xbdf7, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}};
-
-constexpr uint16_t gayflag[8][8] =
-    {
-        {0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6},
-        {0xffe6, 0xffe6, 0xffe6, 0xffe6, 0xffe6, 0xffe6, 0xffe6, 0xffe6},
-        {0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6},
-        {0x37ff, 0x37ff, 0x37ff, 0x37ff, 0x37ff, 0x37ff, 0x37ff, 0x37ff},
-        {0x34df, 0x34df, 0x34df, 0x34df, 0x34df, 0x34df, 0x34df, 0x34df},
-        {0x31df, 0x31df, 0x31df, 0x31df, 0x31df, 0x31df, 0x31df, 0x31df},
-        {0x99bf, 0x99bf, 0x99bf, 0x99bf, 0x99bf, 0x99bf, 0x99bf, 0x99bf}};
-
-constexpr uint16_t win[8][8] =
-    {
-        {0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6},
-        {0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6},
-        {0x9fe6, 0x0640, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x0640, 0x9fe6},
-        {0x9fe6, 0x0640, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x0640, 0x9fe6},
-        {0x9fe6, 0x0640, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x0640, 0x9fe6},
-        {0x9fe6, 0x0640, 0x9fe6, 0x0640, 0x0640, 0x9fe6, 0x0640, 0x9fe6},
-        {0x9fe6, 0x9fe6, 0x0640, 0x9fe6, 0x9fe6, 0x0640, 0x9fe6, 0x9fe6},
-        {0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6}};
-
-constexpr uint16_t lose[8][8] =
-    {
-        {0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xc800, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xc800, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xc800, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xc800, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xc800, 0xc800, 0xc800, 0xc800, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab},
-        {0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab}};
-
-constexpr uint16_t camera[8][8] =
-    {
-        {0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410},
-        {0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410},
-        {0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0xffe6, 0x8410, 0x8410},
-        {0x8410, 0x61a0, 0x61a0, 0x61a0, 0x61a0, 0xffe6, 0x61a0, 0x8410},
-        {0x8410, 0x61a0, 0x0000, 0x0000, 0x61a0, 0x61a0, 0x61a0, 0x8410},
-        {0x8410, 0x61a0, 0x0000, 0x0000, 0x61a0, 0x61a0, 0x61a0, 0x8410},
-        {0x8410, 0x61a0, 0x61a0, 0x61a0, 0x61a0, 0x61a0, 0x61a0, 0x8410},
-        {0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410, 0x8410}};
-
-constexpr uint16_t easteregg[8][8] =
-    {
-        {0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0x0000, 0x0000},
-        {0xffff, 0xffff, 0x0000, 0xffff, 0xffff, 0x0000, 0xffff, 0x0000},
-        {0xffff, 0xffff, 0x0000, 0xffff, 0xffff, 0x0000, 0xffff, 0xffff},
-        {0xffff, 0xffff, 0xffff, 0xffff, 0x0000, 0xffff, 0xffff, 0xffff},
-        {0x0000, 0xffff, 0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0x0000},
-        {0x0000, 0x0000, 0xffff, 0xbdf7, 0xbdf7, 0xbdf7, 0xbdf7, 0x0000},
-        {0x0000, 0x0000, 0xffff, 0xbdf7, 0xbdf7, 0xbdf7, 0xbdf7, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff}};
-
-constexpr uint16_t one[8][8] =
-    {
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xf9ab, 0xf9ab, 0xf9ab, 0xf9ab, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xf9ab, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xf9ab, 0xf9ab, 0x0000, 0x0000, 0x0000}};
-
-constexpr uint16_t two[8][8] =
-    {
-        {0x0000, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0xfcc6, 0x0000},
-        {0x0000, 0xfcc6, 0xfcc6, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xfcc6, 0xfcc6, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0xfcc6, 0xfcc6, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xfcc6, 0xfcc6, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xfcc6, 0xfcc6, 0x0000},
-        {0x0000, 0xfcc6, 0xfcc6, 0x0000, 0xfcc6, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xfcc6, 0xfcc6, 0x0000, 0x0000, 0x0000, 0x0000}};
-
-constexpr uint16_t three[8][8] =
-    {
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x0000, 0x0000},
-        {0x0000, 0x9fe6, 0x9fe6, 0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x9fe6, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x0000},
-        {0x0000, 0x9fe6, 0x9fe6, 0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x0000},
-        {0x0000, 0x0000, 0x9fe6, 0x9fe6, 0x9fe6, 0x9fe6, 0x0000, 0x0000}};
-
-constexpr uint16_t kErrorPattern[8][8] = 
-    {
-        {0xc800, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xc800},
-        {0x0000, 0xc800, 0x0000, 0x0000, 0x0000, 0x0000, 0xc800, 0x0000},
-        {0x0000, 0x0000, 0xc800, 0x0000, 0x0000, 0xc800, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xc800, 0xc800, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0x0000, 0xc800, 0xc800, 0x0000, 0x0000, 0x0000},
-        {0x0000, 0x0000, 0xc800, 0x0000, 0x0000, 0xc800, 0x0000, 0x0000},
-        {0x0000, 0xc800, 0x0000, 0x0000, 0x0000, 0x0000, 0xc800, 0x0000},
-        {0xc800, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xc800}};
-
-SenseHatDisplay::SenseHatDisplay() {
-  available_ = OpenFramebuffer();
-}
-
-SenseHatDisplay::~SenseHatDisplay() {
-  Clear();
-  if (framebuffer_ != nullptr && mapping_size_ > 0U) {
-    munmap(framebuffer_, mapping_size_);
-  }
-  if (file_descriptor_ >= 0) {
-    close(file_descriptor_);
-  }
-}
-
-void SenseHatDisplay::WritePattern(const std::uint16_t pattern[8][8]) {
-  if (!available_ || framebuffer_ == nullptr) {
-    return;
-  }
-
-  constexpr std::uint16_t background = 0x0000U;
-  for (int y = 0; y < 8; ++y) {
-    for (int x = 0; x < 8; ++x) {
-      const bool on = (pattern[y][x]) != 0U;
-      auto* pixel = reinterpret_cast<std::uint16_t*>(framebuffer_ + y * line_length_ + x * 2);
-      
-    }
-  }
-}
+constexpr std::uint8_t kErrorPattern[8] = {
+    0b10000001,
+    0b01000010,
+    0b00100100,
+    0b00011000,
+    0b00011000,
+    0b00100100,
+    0b01000010,
+    0b10000001,
+};
 
 std::string Trim(std::string value) {
   while (!value.empty() && (value.back() == '\n' || value.back() == '\r' || value.back() == ' ' || value.back() == '\t')) {
@@ -215,8 +74,23 @@ std::string FindSenseHatFramebufferPath() {
   return {};
 }
 
-bool SenseHatDisplay::OpenFramebuffer() {
+}  // namespace
 
+SenseHatDisplay::SenseHatDisplay() {
+  available_ = OpenFramebuffer();
+}
+
+SenseHatDisplay::~SenseHatDisplay() {
+  Clear();
+  if (framebuffer_ != nullptr && mapping_size_ > 0U) {
+    munmap(framebuffer_, mapping_size_);
+  }
+  if (file_descriptor_ >= 0) {
+    close(file_descriptor_);
+  }
+}
+
+bool SenseHatDisplay::OpenFramebuffer() {
   const std::string framebuffer_path = FindSenseHatFramebufferPath();
   if (framebuffer_path.empty()) {
     error_message_ = "Sense HAT framebuffer not found.";
@@ -255,6 +129,81 @@ bool SenseHatDisplay::OpenFramebuffer() {
   return true;
 }
 
+std::uint16_t SenseHatDisplay::MakeRgb565(std::uint8_t red, std::uint8_t green, std::uint8_t blue) const {
+  const std::uint16_t r = static_cast<std::uint16_t>((red >> 3U) & 0x1FU);
+  const std::uint16_t g = static_cast<std::uint16_t>((green >> 2U) & 0x3FU);
+  const std::uint16_t b = static_cast<std::uint16_t>((blue >> 3U) & 0x1FU);
+  return static_cast<std::uint16_t>((r << 11U) | (g << 5U) | b);
+}
+
+void SenseHatDisplay::WritePattern(const std::uint8_t pattern[8], std::uint16_t color) {
+  if (!available_ || framebuffer_ == nullptr) {
+    return;
+  }
+
+  constexpr std::uint16_t background = 0x0000U;
+  for (int y = 0; y < 8; ++y) {
+    for (int x = 0; x < 8; ++x) {
+      const bool on = (pattern[y] & (1U << (7 - x))) != 0U;
+      auto* pixel = reinterpret_cast<std::uint16_t*>(framebuffer_ + y * line_length_ + x * 2);
+      *pixel = on ? color : background;
+    }
+  }
+}
+
+void SenseHatDisplay::WritePatternColoured(const std::uint16_t pattern[8][8]) {
+  if (!available_ || framebuffer_ == nullptr) {
+    return;
+  }
+
+  for (int y = 0; y < 8; ++y) {
+    // Get a pointer to the start of the current row (in bytes)
+    unsigned char* row_ptr = framebuffer_ + (y * line_length_);
+    
+    // Cast it to a 16-bit unsigned int pointer for easy array indexing
+    auto* pixel = reinterpret_cast<std::uint16_t*>(row_ptr);
+    for (int x = 0; x < 8; ++x) {
+      // Calculate the pixel position in the framebuffer
+      // auto* pixel = reinterpret_cast<std::uint16_t*>(framebuffer_ + y * line_length_ + x * 2);
+      
+      // Directly assign the 16-bit color value from your 2D grid
+      pixel[x] = pattern[y][x];
+    }
+  }
+}
+
+bool SenseHatDisplay::ShowDigit(int digit, float confidence) {
+  if (!available_) {
+    return false;
+  }
+  if (digit < 0 || digit > 9) {
+    ShowErrorMarker();
+    return false;
+  }
+
+  const std::uint8_t brightness = static_cast<std::uint8_t>(
+      std::clamp(64.0F + confidence * 191.0F, 32.0F, 255.0F));
+
+  std::uint16_t color = 0;
+  if (confidence >= 0.80F) {
+    color = MakeRgb565(0, brightness, 0);
+  } else if (confidence >= 0.55F) {
+    color = MakeRgb565(brightness, brightness, 0);
+  } else {
+    color = MakeRgb565(brightness, 0, 0);
+  }
+
+  WritePattern(kDigitPatterns[digit], color);
+  return true;
+}
+
+void SenseHatDisplay::ShowErrorMarker() {
+  if (!available_) {
+    return;
+  }
+  WritePattern(kErrorPattern, MakeRgb565(255, 0, 0));
+}
+
 void SenseHatDisplay::Clear() {
   if (!available_ || framebuffer_ == nullptr) {
     return;
@@ -267,81 +216,27 @@ void SenseHatDisplay::Clear() {
   }
 }
 
-void SenseHatDisplay::ShowErrorMarker() {
-  if (!available_) {
-    return;
+
+void SenseHatDisplay::StartCountDown(size_t start){
+  if (start > 10){
+    start = 10;
   }
-  WritePattern(kErrorPattern);
+ for (size_t i = start; i > 0; i--) {
+    ShowDigit(i, 1.0);
+    std::this_thread::sleep_for(cShowResultTime);
+  } 
 }
 
-void SenseHatDisplay::StartCountDown(size_t start)
-{
-  WritePattern(three);
-  sleep_for(1000ms);
-  WritePattern(two);
-  sleep_for(100ms);
-  WritePattern(one);
-  sleep_for(1000ms);
-  WritePattern(camera);
+void SenseHatDisplay::ShowWin(){
+  WritePatternColoured(patterns::win);
+}
+void SenseHatDisplay::ShowLoss(){
+  WritePatternColoured(patterns::lose);
+}
+void SenseHatDisplay::ShowCamera(){
+  WritePatternColoured(patterns::camera);
 }
 
-bool SenseHatDisplay::ShowRPS(RPS rps, float confidence)
-{
-  if (!available_) {
-    return false;
-  }
-  if (rps < 0 || rps > 3) {
-    ShowErrorMarker();
-    sleep_for(500ms);
-    return false;
-  }
-  if(rps == 0)
-  {
-    std::cout << "Showing Rock" << std::flush;
-    WritePattern(r);
-    sleep_for(cShowGestureTime);
-    Clear();
-    return false;
-  }
-  if(rps == 1)
-  {
-    std::cout << "Showing Ppr" << std::flush;
-    WritePattern(p);
-    sleep_for(cShowResultTime);
-    Clear();
-    return false;
-  }
-  if(rps == 2)
-  {
-    std::cout << "Showing ✄" << std::flush;
-    WritePattern(s);
-    sleep_for(cShowResultTime);
-    Clear();
-    return false;
-  }
-  if(rps == 3)
-  {
-    std::cout << "Showing Pride" << std::flush;
-    WritePattern(gayflag);
-    sleep_for(cShowResultTime);
-    Clear();
-    return false;
-  }
-  return true;
-}
-
-void SenseHatDisplay::ShowWin()
-{
-  WritePattern(win); 
-  sleep_for(cShowResultTime); 
-  Clear();
-  return;
-}
-
-void SenseHatDisplay::ShowLoss()
-{
-  WritePattern(lose);
-  sleep_for(cShowResultTime);
-  Clear();
-  return;
+void SenseHatDisplay::ShowRPS(RPS rps_index, float confidence){
+  WritePatternColoured(patterns::rps[rps_index]);
 }

@@ -8,11 +8,10 @@ Wants=sensehat-host-ip.service
 Type=simple
 Restart=on-failure
 User=kit-21
-ExecStart=bash
-WorkingDirectory=/home/kit-21/EAIProject/rps_fr_f
+ExecStart=/home/kit-21/EAIProject/rps_fr_fr
+WorkingDirectory=/home/kit-21/EAIProject/
 StandardOutput=journal
 StandardError=journal
-ExecStopPost=/usr/bin/systemctl start sensehat-clear.service
 
 [Install]
 WantedBy=multi-user.target

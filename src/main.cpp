@@ -243,7 +243,7 @@ int RunCameraRPSInference(const ProgramOptions& options,
       
       // Get current image to framebuffer.
       display.StartCountDown(cCountDownLenght);
-      
+      display.ShowCamera();
       std::array<RPSPrediction, cSampleAmount> preds;
       auto next_tick = std::chrono::steady_clock::now(); // current time
       for(size_t i = 0; i < cSampleAmount; i++) {
@@ -316,11 +316,11 @@ int RunCameraRPSInference(const ProgramOptions& options,
           if(win > 0){ // pi should loose as the accessory is there
             display.ShowRPS(ConvertPredToRPS((most_frequent_idx + 2 ) % 3 ), AVGConf);
             std::this_thread::sleep_for(cShowGestureTime);
-            display.ShowLoss();
+            display.ShowWin();
           } else {
             display.ShowRPS(ConvertPredToRPS((most_frequent_idx +1) % 3 ), AVGConf);
             std::this_thread::sleep_for(cShowGestureTime);
-            display.ShowWin();
+            display.ShowLoss();
           }
           std::this_thread::sleep_for(cShowResultTime);
 

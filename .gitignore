@@ -16,3 +16,4 @@ processed/
 artifacts/perf/**
 !artifacts/perf/results_table.csv
 !artifacts/perf/results_table.md
+artifacts/.dir-stamp

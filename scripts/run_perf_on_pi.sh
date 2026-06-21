@@ -13,12 +13,12 @@ set +a
 : "${PI_REMOTE_DIR:?}"
 : "${PI_REMOTE_BIN:=${APP_NAME}}"
 : "${PI_TMUX_SESSION:=pi_debug}"
-: "${PI_TEST_IMAGE:=test_digit.bmp}"
+: "${PI_TEST_IMAGE:=w_gay.bmp}"
 # UE8: Default perf run includes pruning plus the minimal quantization variants.
 # UE9: Update with kmeans and variable k
 : "${KMEANS_K:=16}"
-: "${PI_MODEL_LIST:=baseline.tflite baseline_fp16.tflite baseline_int8.tflite synapse_pruned.tflite neuron_pruned.tflite channel_pruned.tflite kmeans_k${KMEANS_K}.tflite student_kd.tflite student_channel_neuron_pruned_kd_int8.tflite}"
-: "${PI_BENCHMARK_RUNS:=1000}"
+: "${PI_MODEL_LIST:=multihead-mini_160-int8.tflite multihead-mini_160.tflite}"
+: "${PI_BENCHMARK_RUNS:=10}"
 : "${PI_BENCHMARK_WARMUP:=20}"
 : "${PI_PERF_REPEAT:=5}"
 : "${PI_PERF_SUDO:=0}"

@@ -13,3 +13,6 @@ refs/
 test/
 augmented/
 processed/
+artifacts/perf/**
+!artifacts/perf/results_table.csv
+!artifacts/perf/results_table.md

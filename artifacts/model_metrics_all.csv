@@ -1,0 +1,9 @@
+tflite_file,method,tflite_mode,validation_accuracy_g,test_accuracy_g,validation_accuracy_c,test_accuracy_c,tflite_test_accuracy_g,tflite_test_accuracy_c,tflite_file_size_kilobytes,parameters_total
+multihead.tflite,normal FP32 training,fp32,0.939,1.000,0.960,0.970,1.000,0.970,3795,39193
+multihead-int8.tflite,now in int8,int8,0.939,1.000,0.960,0.970,0.697,0.879,1225,39193
+multihead_75.tflite,normal FP32 training,fp32,0.939,0.939,0.990,0.970,0.939,0.970,2382,29689
+multihead_75-int8.tflite,now in int8,int8,0.939,0.939,0.990,0.970,0.576,0.970,824,29689
+multihead-mini.tflite,normal FP32 training,fp32,0.909,1.000,0.970,1.000,1.000,1.000,1828,39193
+multihead-mini-int8.tflite,now in int8,int8,0.909,1.000,0.970,1.000,0.667,0.970,638,39193
+multihead-mini_160.tflite,normal FP32 training,fp32,0.899,0.909,0.960,0.939,0.909,0.939,1828,39193
+multihead-mini_160-int8.tflite,now in int8,int8,0.899,0.909,0.960,0.939,0.758,0.970,638,39193

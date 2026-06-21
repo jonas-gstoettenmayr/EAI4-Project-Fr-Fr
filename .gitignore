@@ -1,5 +1,6 @@
 .venv/
-artifacts/
+artifacts/keras/
+artifacts/saved_models/
 build/
 third_party/
 .vscode/settings.json

@@ -1,0 +1,3 @@
+tflite_file,method,tflite_mode,validation_accuracy_g,test_accuracy_g,validation_accuracy_c,test_accuracy_c,tflite_test_accuracy_g,tflite_test_accuracy_c,tflite_file_size_kilobytes,parameters_total
+multihead.tflite,normal FP32 training,fp32,0.939,0.939,0.990,0.970,0.939,0.970,2382,29689
+multihead-int8.tflite,now in int8,int8,0.939,0.939,0.990,0.970,0.576,0.970,824,29689

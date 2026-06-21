@@ -193,6 +193,11 @@ bool senseInit()
         if (!initOk)
             close(ledFile);
     }
+
+    if (initOk)
+        senseClear();
+
+    return initOk;
 }
 
 // Free Sense Hat file handles
@@ -297,22 +302,6 @@ void senseSetRGB565pixels(rgb565_pixels_t pixelArray)
     {
         lowLight_state = true; // the brightness of all LEDs is reduced
     }
-}
-
-// Read a single pixel color in a R, G, B array
-rgb_pixel_t senseGetRGBpixel(int x, int y)
-{
-    rgb_pixel_t read_pixel = {0}; // black pixel initialization
-
-    // unsigned int type casting to avoid negative values
-    if ((unsigned int)x < SENSE_LED_WIDTH &&
-        (unsigned int)y < SENSE_LED_WIDTH)
-    {
-        read_pixel = senseUnPackPixel(pixelMap[x * SENSE_LED_WIDTH + y]);
-    }
-
-    // Return black if out of bounds
-    return read_pixel;
 }
 
 // Read a single pixel color in a R, G, B array

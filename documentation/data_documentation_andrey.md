@@ -39,14 +39,6 @@ Run this:
 
 preprocess.py
 
-Creates a processed folder with the images resized. The size can be changed in process.py
+Creates a processed folder with the images resized. The size can be changed in preprocess.py
 
-
-## The c++ stuff
-
-The c++ preprocess file follows the same logic as digit_preprocessor.cpp but without all the digit stuff and keep the colour. The preprocessing steps are the exact same in c++ and in python
-
-
-# Augmentation
-
-The augmentation is in train_and_convert.py
+The preprocessed images are resized using the PIL library
